@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/jessevdk/go-flags"
 )
 
 func main() {
@@ -21,9 +19,9 @@ func main() {
 			fmt.Fprintln(os.Stderr, "interrupted")
 			os.Exit(130)
 		}
-		var flagErr *flags.Error
-		if errors.As(err, &flagErr) && flagErr.Type == flags.ErrHelp {
-			os.Exit(0)
+		var cliExit cliExitError
+		if errors.As(err, &cliExit) {
+			os.Exit(cliExit.code)
 		}
 		log.Fatal(err)
 	}

@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	cloud.google.com/go/spanner v1.91.0
+	github.com/alecthomas/kong v1.15.0
 	github.com/apstndb/spanemuboost v0.4.0
 	github.com/apstndb/spannerplan v0.1.6
 	github.com/apstndb/spanpg v0.1.1
@@ -11,7 +12,6 @@ require (
 	github.com/apstndb/spanvalue v0.3.0
 	github.com/googleapis/go-sql-spanner v1.25.1
 	github.com/hymkor/go-multiline-ny v0.22.4
-	github.com/jessevdk/go-flags v1.6.1
 	github.com/nyaosorg/go-readline-ny v1.14.1
 	github.com/olekukonko/tablewriter v1.1.4
 )

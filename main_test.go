@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -9,7 +11,6 @@ import (
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
 	"github.com/apstndb/spantype"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
-	"github.com/jessevdk/go-flags"
 )
 
 func TestParseCLIDialect(t *testing.T) {
@@ -309,9 +310,8 @@ func TestSpannerEnvDefaults(t *testing.T) {
 	t.Setenv("SPANNER_PROJECT_ID", "proj-env")
 	t.Setenv("SPANNER_INSTANCE_ID", "inst-env")
 	t.Setenv("SPANNER_DATABASE_ID", "db-env")
-	var opts cliOpts
-	p := flags.NewParser(&opts, flags.Default)
-	if _, err := p.ParseArgs([]string{"spannersh"}); err != nil {
+	opts, err := parseCLIOpts(nil, io.Discard, io.Discard)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if opts.Project != "proj-env" || opts.Instance != "inst-env" || opts.Database != "db-env" {
@@ -323,12 +323,23 @@ func TestSpannerFlagOverridesEnv(t *testing.T) {
 	t.Setenv("SPANNER_PROJECT_ID", "proj-env")
 	t.Setenv("SPANNER_INSTANCE_ID", "inst-env")
 	t.Setenv("SPANNER_DATABASE_ID", "db-env")
-	var opts cliOpts
-	p := flags.NewParser(&opts, flags.Default)
-	if _, err := p.ParseArgs([]string{"spannersh", "-p", "proj-flag", "-i", "inst-flag", "-d", "db-flag"}); err != nil {
+	opts, err := parseCLIOpts([]string{"-p", "proj-flag", "-i", "inst-flag", "-d", "db-flag"}, io.Discard, io.Discard)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if opts.Project != "proj-flag" || opts.Instance != "inst-flag" || opts.Database != "db-flag" {
 		t.Fatalf("opts = %+v", opts)
+	}
+}
+
+func TestParseCLIOptsHelpRequestsExit(t *testing.T) {
+	var out bytes.Buffer
+	_, err := parseCLIOpts([]string{"--help"}, &out, io.Discard)
+	var cliExit cliExitError
+	if !errors.As(err, &cliExit) || cliExit.code != 0 {
+		t.Fatalf("parseCLIOpts(--help) error = %T %v, want cliExitError(0)", err, err)
+	}
+	if !strings.Contains(out.String(), "Usage: spannersh") {
+		t.Fatalf("help output = %q", out.String())
 	}
 }

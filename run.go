@@ -1,5 +1,5 @@
 //go:generate go run ./tools/genprops -out docs/generated/connection-properties.generated.md
-//go:generate mise exec -- ptyhelp patch -file README.md -marker spannersh-help -cols 256 -o docs/generated/spannersh-help.txt -- go run . --help
+//go:generate mise --no-config exec go:github.com/apstndb/ptyhelp@0.2.2 -- ptyhelp patch -file README.md -marker spannersh-help -cols 256 -o docs/generated/spannersh-help.txt -- go run . --help
 
 package main
 
@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
+	"github.com/alecthomas/kong"
 	"github.com/hymkor/go-multiline-ny"
-	"github.com/jessevdk/go-flags"
 	"github.com/nyaosorg/go-readline-ny"
 	"github.com/nyaosorg/go-readline-ny/keys"
 	"github.com/nyaosorg/go-readline-ny/simplehistory"
@@ -29,20 +29,28 @@ const (
 var reExitCommand = regexp.MustCompile(`(?i)^\s*(exit|quit)\s*;?\s*$`)
 
 type cliOpts struct {
-	ShowVersion bool   `long:"version" description:"Print version and exit"`
-	Project     string `short:"p" long:"project" env:"SPANNER_PROJECT_ID" description:"Google Cloud Project ID (default from env SPANNER_PROJECT_ID)"`
-	Instance    string `short:"i" long:"instance" env:"SPANNER_INSTANCE_ID" description:"Spanner instance ID (default from env SPANNER_INSTANCE_ID)"`
-	Database    string `short:"d" long:"database" env:"SPANNER_DATABASE_ID" description:"Database ID (default from env SPANNER_DATABASE_ID)"`
-	DSNSuffix   string `long:"dsn-suffix" description:"Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs."`
-	Dialect     string `long:"dialect" default:"auto" description:"SQL dialect for client-side parser.Split: auto (read database_dialect from go-sql-spanner; fallback google-standard-sql), google-standard-sql, or postgresql. For postgresql, dialect=POSTGRESQL is added to the DSN unless already in --dsn-suffix."`
-	Format      string `long:"format" default:"table" description:"Output format: table, csv, or jsonl (case-insensitive). EXPLAIN plan output is always a text plan tree."`
+	ShowVersion bool   `name:"version" help:"Print version and exit."`
+	Project     string `short:"p" name:"project" env:"SPANNER_PROJECT_ID" placeholder:"PROJECT" help:"Google Cloud Project ID. Default: ${env}."`
+	Instance    string `short:"i" name:"instance" env:"SPANNER_INSTANCE_ID" placeholder:"INSTANCE" help:"Spanner instance ID. Default: ${env}."`
+	Database    string `short:"d" name:"database" env:"SPANNER_DATABASE_ID" placeholder:"DATABASE" help:"Database ID. Default: ${env}."`
+	DSNSuffix   string `name:"dsn-suffix" placeholder:"PARAMS" help:"Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs."`
+	Dialect     string `name:"dialect" default:"auto" placeholder:"DIALECT" help:"Client-side SQL parser dialect: auto, google-standard-sql, or postgresql. PostgreSQL adds dialect=POSTGRESQL to the DSN unless --dsn-suffix already sets dialect=."`
+	Format      string `name:"format" default:"table" placeholder:"FORMAT" help:"Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree."`
+}
+
+type cliExitError struct {
+	code int
+}
+
+func (e cliExitError) Error() string {
+	return fmt.Sprintf("CLI requested exit with status %d", e.code)
 }
 
 func run(ctx context.Context) error {
 	out := os.Stdout
 	errOut := os.Stderr
 
-	opts, err := parseCLIOpts()
+	opts, err := parseCLIOpts(os.Args[1:], out, errOut)
 	if err != nil {
 		return err
 	}
@@ -97,10 +105,28 @@ func configureREPLEditor(ed *multiline.Editor) (*simplehistory.Container, error)
 	return hist, nil
 }
 
-func parseCLIOpts() (cliOpts, error) {
+func parseCLIOpts(args []string, out, errOut io.Writer) (cliOpts, error) {
 	var opts cliOpts
-	_, err := flags.NewParser(&opts, flags.Default).Parse()
-	return opts, err
+	var exitCode *int
+	parser, err := kong.New(
+		&opts,
+		kong.Name("spannersh"),
+		kong.Description("Interactive shell for Google Cloud Spanner."),
+		kong.Writers(out, errOut),
+		kong.Exit(func(code int) {
+			exitCode = &code
+		}),
+	)
+	if err != nil {
+		return opts, err
+	}
+	if _, err := parser.Parse(args); err != nil {
+		return opts, err
+	}
+	if exitCode != nil {
+		return opts, cliExitError{code: *exitCode}
+	}
+	return opts, nil
 }
 
 func (opts cliOpts) validateConnectionTarget() error {
