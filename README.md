@@ -6,7 +6,7 @@ Interactive shell for [Google Cloud Spanner](https://cloud.google.com/spanner): 
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.26.2+
 - Google Cloud credentials with access to the target instance (for example Application Default Credentials from `gcloud auth application-default login`).
 
 The [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) driver detects whether the database uses **GoogleSQL** or **PostgreSQL** dialect after connect unless you override this via DSN parameters (see **`--dsn-suffix`** and the driver documentation). The shell’s **`--dialect`** aligns **client-side statement splitting** with that choice; use **`--dialect postgresql`** when working against a PostgreSQL-dialect database so semicolons inside PostgreSQL-specific literals are handled like the driver’s parser.
