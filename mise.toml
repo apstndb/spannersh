@@ -1,0 +1,2 @@
+[tools]
+"go:github.com/apstndb/ptyhelp" = "0.2.2"

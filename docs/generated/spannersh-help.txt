@@ -1,0 +1,25 @@
+Usage:
+  spannersh [OPTIONS]
+
+Application Options:
+      --version     Print version and exit
+  -p, --project=    Google Cloud Project ID (default from env
+                    SPANNER_PROJECT_ID) [$SPANNER_PROJECT_ID]
+  -i, --instance=   Spanner instance ID (default from env SPANNER_INSTANCE_ID)
+                    [$SPANNER_INSTANCE_ID]
+  -d, --database=   Database ID (default from env SPANNER_DATABASE_ID)
+                    [$SPANNER_DATABASE_ID]
+      --dsn-suffix= Extra go-sql-spanner DSN parameters (snake_case;
+                    semicolon-separated). See docs.
+      --dialect=    SQL dialect for client-side parser.Split: auto (read
+                    database_dialect from go-sql-spanner; fallback
+                    google-standard-sql), google-standard-sql, or postgresql.
+                    For postgresql, dialect=POSTGRESQL is added to the DSN
+                    unless already in --dsn-suffix. (default: auto)
+      --format=     Output format: table, csv, or jsonl (case-insensitive).
+                    EXPLAIN plan output is always a text plan tree. (default:
+                    table)
+
+Help Options:
+  -h, --help        Show this help message
+

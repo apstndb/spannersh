@@ -1,0 +1,23 @@
+---
+description: spannersh — agent policy (AGENTS.md is canonical; Cursor scope)
+globs:
+  - "**/*.go"
+  - "AGENTS.md"
+  - "docs/**"
+  - "README.md"
+---
+
+# spannersh (Cursor)
+
+**Canonical copy:** repository root **`AGENTS.md`** holds assumptions, practices, and testing notes for this project. **Follow `AGENTS.md` when changing code or docs.**
+
+This `.mdc` is for **scope** (`globs`) and **notes that belong only in this file**.
+
+## Cursor-only (this file)
+
+- **`globs`** — prefer this rule when editing paths that match; include `AGENTS.md` itself.
+- **`description`** — label for Cursor’s rule list.
+
+## Do not duplicate `AGENTS.md`
+
+Keep design, EXPLAIN behavior, `maps`/`slices`, test tags, etc. **only in `AGENTS.md`**. Do not copy them here.
