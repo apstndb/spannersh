@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
 
@@ -194,13 +195,31 @@ func replHandleReadErr(err error, errOut io.Writer) (stop bool, loopErr error) {
 }
 
 // execInput runs one user statement and prints driver/query errors to errOut; context.Canceled continues the REPL.
-func (a *app) execInput(input string, errOut io.Writer) {
-	if err := a.executeAndRender(input); err != nil {
+func (a *app) execInput(ctx context.Context, input string, errOut io.Writer) {
+	if err := a.executeAndRenderContext(ctx, input); err != nil {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(errOut, "interrupted")
 			return
 		}
 		fmt.Fprintf(errOut, "ERROR: %v\n", err)
+	}
+}
+
+func contextWithInterrupt(parent context.Context, interrupts <-chan os.Signal) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-interrupts:
+			cancel()
+		case <-parent.Done():
+			cancel()
+		case <-done:
+		}
+	}()
+	return ctx, func() {
+		close(done)
+		cancel()
 	}
 }
 
@@ -210,9 +229,14 @@ func runREPL(ctx context.Context, cli *app, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	defer signal.Stop(interrupts)
 
 	for {
-		lines, err := ed.Read(ctx)
+		readCtx, cancelRead := contextWithInterrupt(ctx, interrupts)
+		lines, err := ed.Read(readCtx)
+		cancelRead()
 		if err != nil {
 			if stop, loopErr := replHandleReadErr(err, errOut); stop {
 				return loopErr
@@ -228,6 +252,8 @@ func runREPL(ctx context.Context, cli *app, errOut io.Writer) error {
 			return nil
 		}
 		hist.Add(input)
-		cli.execInput(input, errOut)
+		queryCtx, cancelQuery := contextWithInterrupt(ctx, interrupts)
+		cli.execInput(queryCtx, input, errOut)
+		cancelQuery()
 	}
 }

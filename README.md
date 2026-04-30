@@ -110,7 +110,7 @@ Generated documentation is refreshed from the module root with:
 go generate ./...
 ```
 
-`go generate` runs [`ptyhelp patch`](https://github.com/apstndb/ptyhelp) through **mise** using the same version recorded in the project-level [`mise.toml`](mise.toml): it runs `go run . --help` in a PTY, writes `docs/generated/spannersh-help.txt`, and replaces the `<!-- spannersh-help begin/end -->` block in this file. It also regenerates [docs/generated/connection-properties.generated.md](docs/generated/connection-properties.generated.md) after `go-sql-spanner` updates.
+`go generate` runs [`ptyhelp patch`](https://github.com/apstndb/ptyhelp) through **mise** with an explicit tool version that should match the project-level [`mise.toml`](mise.toml). The explicit `go:generate` tool spec avoids installing unrelated tools from a developer's global mise configuration during generation. The generator runs `go run . --help` in a PTY, writes `docs/generated/spannersh-help.txt`, and replaces the `<!-- spannersh-help begin/end -->` block in this file. It also regenerates [docs/generated/connection-properties.generated.md](docs/generated/connection-properties.generated.md) after `go-sql-spanner` updates.
 
 CI runs formatting, vet, build, version, unit, race, vulnerability, and integration checks on pushes and pull requests. Releases are created by pushing a `v*` tag; the GoReleaser workflow builds archives and checksums for GitHub Releases.
 

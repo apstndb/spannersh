@@ -23,6 +23,10 @@ type app struct {
 }
 
 func (a *app) executeAndRender(query string) error {
+	return a.executeAndRenderContext(a.ctx, query)
+}
+
+func (a *app) executeAndRenderContext(ctx context.Context, query string) error {
 	plan, err := planExecution(query, a.dialect)
 	if err != nil {
 		return err
@@ -35,7 +39,7 @@ func (a *app) executeAndRender(query string) error {
 			execSQL: joinBatchExecSQL(batch),
 			mode:    batch[0].mode,
 		}
-		head, err := executeQuery(a.ctx, a.db, pq)
+		head, err := executeQuery(ctx, a.db, pq)
 		if err != nil {
 			return err
 		}

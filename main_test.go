@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
@@ -341,5 +344,25 @@ func TestParseCLIOptsHelpRequestsExit(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Usage: spannersh") {
 		t.Fatalf("help output = %q", out.String())
+	}
+}
+
+func TestContextWithInterruptCancelsChildOnly(t *testing.T) {
+	parent, stopParent := context.WithCancel(t.Context())
+	defer stopParent()
+	interrupts := make(chan os.Signal, 1)
+	child, stopChild := contextWithInterrupt(parent, interrupts)
+	defer stopChild()
+
+	interrupts <- os.Interrupt
+	select {
+	case <-child.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("child context was not canceled")
+	}
+	select {
+	case <-parent.Done():
+		t.Fatal("parent context should remain active after one interrupt")
+	default:
 	}
 }
