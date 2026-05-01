@@ -24,6 +24,13 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: true
 
+      - uses: jdx/mise-action@v4
+        if: matrix.go == '1.26'
+        with:
+          version: 2026.4.28
+          install: true
+          cache: true
+
       - name: Verify modules
         run: go mod verify
 
@@ -60,6 +67,12 @@ jobs:
           go build -o spannersh.testbin -ldflags "-X main.version=${VERSION}" .
           test "$(./spannersh.testbin --version)" = "spannersh ${VERSION}"
           rm -f spannersh.testbin
+
+      - name: Verify generated docs
+        if: matrix.go == '1.26'
+        run: |
+          go generate ./...
+          git diff --exit-code -- README.md docs/generated/spannersh-help.txt docs/generated/connection-properties.generated.md
 
       - name: go test
         run: go test -race -shuffle=on -coverprofile=coverage.out ./...

@@ -1,5 +1,5 @@
 //go:generate go run ./tools/genprops -out docs/generated/connection-properties.generated.md
-//go:generate mise --no-config exec go:github.com/apstndb/ptyhelp@0.2.2 -- ptyhelp patch -file README.md -marker spannersh-help -cols 256 -o docs/generated/spannersh-help.txt -- go run . --help
+//go:generate mise exec -- ptyhelp patch -file README.md -marker spannersh-help -cols 256 -o docs/generated/spannersh-help.txt -- go run . --help
 
 package main
 
