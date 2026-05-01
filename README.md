@@ -81,8 +81,99 @@ Press **Ctrl+C** to cancel an in-flight query or interrupt the session (see cont
 
 - After connect, the shell **warms the session** by reading the driver’s **`database_dialect`** property (client-side **`SHOW`**, no PROFILE `ExecOptions`), so the first interactive query is less likely to pay full cold-start cost. With **`--dialect auto`**, that read runs **once** as part of dialect detection; with an **explicit** `--dialect`, it runs **in the background** while the REPL starts. Errors are printed to **stderr** and the REPL still runs.
 - Statements are executed through `database/sql` **QueryContext**. The driver routes **SELECT**, **DML**, and **DDL** appropriately (including long-running DDL on the admin API). **Multiple statements in one input** (semicolon-separated, as supported by [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) from v1.22+) are printed **one result block per statement**—same table / **`csv`** / **`jsonl`** shape and execution summary as a single query—with a **blank line** between blocks.
-- Normal queries use **`ExecuteSqlRequest_PROFILE`** with **`ReturnResultSetStats` enabled**. After the result table (or **`csv`** / **`jsonl`** output), the shell prints an **execution summary** from Spanner’s **`ResultSetStats.query_stats`** when it is present. By default, the detailed block is limited to `cpu_time`, `rows_scanned`, `deleted_rows_scanned`, `optimizer_statistics_package`, and `optimizer_version`; use **`-v`** / **`--verbose`** to print the full `query_stats` block. The pinned **`go-sql-spanner`** release includes **[googleapis/go-sql-spanner#778](https://github.com/googleapis/go-sql-spanner/pull/778)** so **`QueryStats`** is forwarded into **`ResultSetStats`** (see also **[googleapis/go-sql-spanner#779](https://github.com/googleapis/go-sql-spanner/issues/779)**). The query plan tree is **not** printed unless you use **`EXPLAIN`** / **`EXPLAIN ANALYZE`**.
+- Normal queries use **`ExecuteSqlRequest_PROFILE`** with **`ReturnResultSetStats` enabled**. After the result table (or **`csv`** / **`jsonl`** output), the shell prints an **execution summary** from Spanner’s **`ResultSetStats.query_stats`** when it is present. By default, the detailed block is limited to `cpu_time`, `rows_scanned`, `deleted_rows_scanned`, and `optimizer_version`; use **`-v`** / **`--verbose`** to print the full `query_stats` block. The pinned **`go-sql-spanner`** release includes **[googleapis/go-sql-spanner#778](https://github.com/googleapis/go-sql-spanner/pull/778)** so **`QueryStats`** is forwarded into **`ResultSetStats`** (see also **[googleapis/go-sql-spanner#779](https://github.com/googleapis/go-sql-spanner/issues/779)**). The query plan tree is **not** printed unless you use **`EXPLAIN`** / **`EXPLAIN ANALYZE`**.
 - **`EXPLAIN`** / **`EXPLAIN ANALYZE`** are not sent to Spanner as SQL keywords. The shell strips them client-side and runs the inner statement with **`QueryMode = PLAN`** or **`PROFILE`**. **`EXPLAIN`**: **plan tree** only (via [spannerplan](https://github.com/apstndb/spannerplan)) when plan nodes exist—no **`N row(s) in set`** line and no stats block, since PLAN typically does not populate **`QueryStats`**. **`EXPLAIN ANALYZE`**: plan tree first, then **`N row(s) in set`** (and **`elapsed_time` in parentheses when `query_stats` includes it**), then a **`query_stats`** key/value block **only when `query_stats` is returned**—the shell does not reconstruct stats from the plan tree. Plan output ignores **`--format`**. For **multi-statement** input, the shell **batches** consecutive statements that share the same **`QueryMode`** into **one** `QueryContext` (so **normal `SELECT` and `EXPLAIN ANALYZE`**, both **PROFILE**, can run together); **`EXPLAIN` (PLAN)** starts a **separate** batch from **PROFILE**. Statements are split with [go-sql-spanner’s `parser.Split`](https://pkg.go.dev/github.com/googleapis/go-sql-spanner/parser#StatementParser.Split); **per-statement display** (plan vs table) still follows each statement’s role.
+
+## Examples
+
+Timing-related values such as elapsed time and CPU time vary by environment and run.
+
+### Default result output and `EXPLAIN ANALYZE`
+
+```text
+spanner> SELECT *
+      -> FROM Singers
+      -> JOIN Albums USING (SingerId);
++----------+-----------+----------+------------+------------+---------+-------------------------+-----------------+
+| SingerId | FirstName | LastName | SingerInfo | BirthDate  | AlbumId | AlbumTitle              | MarketingBudget |
+| INT64    | STRING    | STRING   | BYTES      | DATE       | INT64   | STRING                  | INT64           |
++----------+-----------+----------+------------+------------+---------+-------------------------+-----------------+
+| 1        | Marc      | Richards | NULL       | 1970-09-03 | 1       | Total Junk              | NULL            |
+| 1        | Marc      | Richards | NULL       | 1970-09-03 | 2       | Go, Go, Go              | NULL            |
+| 2        | Catalina  | Smith    | NULL       | 1990-08-17 | 1       | Green                   | NULL            |
+| 2        | Catalina  | Smith    | NULL       | 1990-08-17 | 2       | Forever Hold Your Peace | NULL            |
+| 2        | Catalina  | Smith    | NULL       | 1990-08-17 | 3       | Terrified               | NULL            |
+| 3        | Alice     | Trentor  | NULL       | 1991-10-02 | 1       | Nothing To Do With Me   | NULL            |
+| 4        | Lea       | Martin   | NULL       | 1991-11-09 | 1       | Play                    | NULL            |
++----------+-----------+----------+------------+------------+---------+-------------------------+-----------------+
+7 rows in set (13.56 msecs)
+cpu_time            : 11.36 msecs
+deleted_rows_scanned: 0
+optimizer_version   : 7
+rows_scanned        : 12
+spanner> EXPLAIN ANALYZE
+      -> SELECT *
+      -> FROM Singers
+      -> JOIN Albums USING (SingerId);
++-----+-------------------------------------------------------------------------------------+------+-------+---------------+
+| ID  | Operator                                                                            | Rows | Exec. | Total Latency |
++-----+-------------------------------------------------------------------------------------+------+-------+---------------+
+|   0 | Distributed Union on Singers <Row> (split_ranges_aligned)                           |    7 |     1 | 10.42 msecs   |
+|   1 | +- Local Distributed Union <Row>                                                    |    7 |     3 | 3.6 msecs     |
+|   2 |    +- Serialize Result <Row>                                                        |    7 |     4 | 1.05 msecs    |
+|   3 |       +- Cross Apply <Row>                                                          |    7 |     4 | 1.04 msecs    |
+|   4 |          +- [Input] Table Scan on Singers <Row> (Full scan, scan_method: Automatic) |    5 |     4 | 0.95 msecs    |
+|  10 |          +- [Map] Local Distributed Union <Row>                                     |    7 |     5 | 0.08 msecs    |
+|  11 |             +- Filter Scan <Row> (seekable_key_size: 0)                             |      |       |               |
+| *12 |                +- Table Scan on Albums <Row> (scan_method: Row)                     |    7 |     5 | 0.07 msecs    |
++-----+-------------------------------------------------------------------------------------+------+-------+---------------+
+Predicates(identified by ID):
+ 12: Seek Condition: ($SingerId_1 = $SingerId)
+7 rows in set (10.85 msecs)
+cpu_time            : 8.43 msecs
+deleted_rows_scanned: 0
+optimizer_version   : 7
+rows_scanned        : 12
+```
+
+### `--verbose` query stats
+
+```text
+$ go run ./ -v -p ${SPANNER_PROJECT_ID} -i ${SPANNER_INSTANCE_ID} -d ${SPANNER_DATABASE_ID}
+spanner> SELECT * FROM Singers;
++----------+-----------+----------+------------+------------+
+| SingerId | FirstName | LastName | SingerInfo | BirthDate  |
+| INT64    | STRING    | STRING   | BYTES      | DATE       |
++----------+-----------+----------+------------+------------+
+| 1        | Marc      | Richards | NULL       | 1970-09-03 |
+| 2        | Catalina  | Smith    | NULL       | 1990-08-17 |
+| 3        | Alice     | Trentor  | NULL       | 1991-10-02 |
+| 4        | Lea       | Martin   | NULL       | 1991-11-09 |
+| 5        | David     | Lomond   | NULL       | 1977-01-29 |
++----------+-----------+----------+------------+------------+
+5 rows in set (14.47 msecs)
+bytes_returned              : 116
+cpu_time                    : 18.1 msecs
+data_bytes_read             : 0
+deleted_rows_scanned        : 0
+elapsed_time                : 14.47 msecs
+filesystem_delay_seconds    : 0.46 msecs
+is_graph_query              : false
+locking_delay               : 0 msecs
+memory_peak_usage_bytes     : 112
+memory_usage_percentage     : 0.000
+optimizer_statistics_package: auto_20260429_12_58_32UTC
+optimizer_version           : 7
+query_plan_creation_time    : 1.73 msecs
+remote_server_calls         : 3/3
+rows_returned               : 5
+rows_scanned                : 5
+runtime_creation_time       : 0.58 msecs
+server_queue_delay          : 0.05 msecs
+statistics_load_time        : 0
+time_to_first_row           : 13.26 msecs
+total_memory_peak_usage_byte: 112
+```
 
 ## More documentation
 

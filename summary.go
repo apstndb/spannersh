@@ -14,11 +14,10 @@ import (
 const queryStatsOmitQueryTextKey = "query_text"
 
 var defaultQueryStatsKeys = map[string]struct{}{
-	"cpu_time":                     {},
-	"deleted_rows_scanned":         {},
-	"optimizer_statistics_package": {},
-	"optimizer_version":            {},
-	"rows_scanned":                 {},
+	"cpu_time":             {},
+	"deleted_rows_scanned": {},
+	"optimizer_version":    {},
+	"rows_scanned":         {},
 }
 
 // formatExecutionSummary prints "N row(s) in set" and, when present, query_stats lines after it.

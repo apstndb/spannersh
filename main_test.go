@@ -412,7 +412,7 @@ func TestQueryStatsKeysForDisplayDefaultSubset(t *testing.T) {
 		"rows_scanned":                 3,
 		"timestamp_lower_bound":        "ignored",
 	}, false)
-	want := []string{"cpu_time", "optimizer_statistics_package", "optimizer_version", "rows_scanned"}
+	want := []string{"cpu_time", "optimizer_version", "rows_scanned"}
 	if !slices.Equal(keys, want) {
 		t.Fatalf("keys = %v, want %v", keys, want)
 	}
