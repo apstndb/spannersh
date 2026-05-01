@@ -21,6 +21,14 @@ The [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) driver detect
 go install github.com/apstndb/spannersh@latest
 ```
 
+You can also install it with [mise](https://mise.jdx.dev/):
+
+```bash
+mise use -g github:apstndb/spannersh@latest
+# or install from the Go module
+mise use -g go:github.com/apstndb/spannersh@latest
+```
+
 For `go install module@version`, `--version` prints the module version embedded in the binary ([`runtime/debug.ReadBuildInfo`](https://pkg.go.dev/runtime/debug#ReadBuildInfo) `Main.Version` — the tag you asked for, or a pseudo-version for commits without a tag). Local `go build` / `go install` from a checkout usually reports `dev` because `Main.Version` is `(devel)` unless you pass `-ldflags` (see below).
 
 If you clone this repository, build from the module root:
