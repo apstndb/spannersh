@@ -4,6 +4,8 @@
 
 Yet another interactive tool for [Google Cloud Spanner](https://cloud.google.com/spanner), following [cloudspannerecosystem/spanner-cli](https://github.com/cloudspannerecosystem/spanner-cli) (the basis of the current official Spanner CLI) and [apstndb/spanner-mycli](https://github.com/apstndb/spanner-mycli): run SQL from the terminal, print result tables (with column types), and show the query plan.
 
+It stays intentionally simple by reusing existing Go packages for the driver, REPL, plan rendering, and value formatting instead of re-implementing that machinery in this repository.
+
 ## Prerequisites
 
 - Go 1.26.2+

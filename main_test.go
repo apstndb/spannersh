@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
 	"github.com/apstndb/spantype"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
+	"github.com/hymkor/go-multiline-ny"
+	"github.com/nyaosorg/go-ttyadapter/tty10pe"
 )
 
 func TestParseCLIDialect(t *testing.T) {
@@ -344,6 +347,47 @@ func TestParseCLIOptsHelpRequestsExit(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Usage: spannersh") {
 		t.Fatalf("help output = %q", out.String())
+	}
+}
+
+func TestRequireInteractiveTerminalRejectsPipes(t *testing.T) {
+	inReader, inWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inReader.Close()
+	defer inWriter.Close()
+	outReader, outWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outReader.Close()
+	defer outWriter.Close()
+
+	err = requireInteractiveTerminal(inReader, outWriter)
+	if err == nil {
+		t.Fatal("expected non-terminal pipe endpoints to be rejected")
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("error = %q, want interactive-terminal guidance", err)
+	}
+}
+
+func TestSetREPLTTYUsesTTY10PE(t *testing.T) {
+	var ed multiline.Editor
+	setREPLTTY(&ed)
+	if _, ok := ed.LineEditor.Tty.(*tty10pe.Tty); !ok {
+		t.Fatalf("tty backend = %T, want *tty10pe.Tty", ed.LineEditor.Tty)
+	}
+}
+
+func TestReplHandleReadErrStopsOnTTYUnavailable(t *testing.T) {
+	stop, loopErr := replHandleReadErr(&os.PathError{Op: "read", Path: "/dev/tty", Err: syscall.EAGAIN}, io.Discard)
+	if !stop {
+		t.Fatal("temporary tty read error should stop the loop")
+	}
+	if loopErr == nil || !strings.Contains(loopErr.Error(), "interactive terminal became unavailable") {
+		t.Fatalf("loopErr = %v, want interactive-terminal error", loopErr)
 	}
 }
 

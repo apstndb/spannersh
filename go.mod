@@ -13,7 +13,9 @@ require (
 	github.com/googleapis/go-sql-spanner v1.25.1
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.0
+	github.com/nyaosorg/go-ttyadapter v0.6.1
 	github.com/olekukonko/tablewriter v1.1.4
+	golang.org/x/term v0.42.0
 )
 
 require (
@@ -79,7 +81,6 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/nyaosorg/go-ttyadapter v0.6.1 // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.3.0 // indirect
 	github.com/olekukonko/ll v0.1.8 // indirect

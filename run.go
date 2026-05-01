@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"github.com/alecthomas/kong"
@@ -20,6 +21,8 @@ import (
 	"github.com/nyaosorg/go-readline-ny"
 	"github.com/nyaosorg/go-readline-ny/keys"
 	"github.com/nyaosorg/go-readline-ny/simplehistory"
+	"github.com/nyaosorg/go-ttyadapter/tty10pe"
+	"golang.org/x/term"
 )
 
 const (
@@ -69,6 +72,9 @@ func run(ctx context.Context) error {
 	if err := opts.validateConnectionTarget(); err != nil {
 		return err
 	}
+	if err := requireInteractiveTerminal(os.Stdin, os.Stdout); err != nil {
+		return err
+	}
 
 	cli, err := openCLIApp(ctx, out, errOut, opts)
 	if err != nil {
@@ -90,9 +96,17 @@ func replInputComplete(lines []string) bool {
 	return strings.HasSuffix(b, ";") || reExitCommand.MatchString(b)
 }
 
+func setREPLTTY(ed *multiline.Editor) {
+	// go-readline-ny defaults to tty8pe (go-tty/v2), which currently returns
+	// EAGAIN from /dev/tty in our interactive shells. tty10pe uses x/term and
+	// blocks correctly, so pin the backend explicitly until the default stack is fixed.
+	ed.SetTty(&tty10pe.Tty{})
+}
+
 // configureREPLEditor wires history, multiline submit rules, keys, and prompts on ed (must not be copied; it holds a mutex).
 func configureREPLEditor(ed *multiline.Editor) (*simplehistory.Container, error) {
 	hist := simplehistory.New()
+	setREPLTTY(ed)
 	ed.SetHistory(hist)
 	ed.SetHistoryCycling(true)
 	ed.SubmitOnEnterWhen(func(lines []string, _ int) bool {
@@ -139,6 +153,16 @@ func parseCLIOpts(args []string, out, errOut io.Writer) (cliOpts, error) {
 func (opts cliOpts) validateConnectionTarget() error {
 	if opts.Project == "" || opts.Instance == "" || opts.Database == "" {
 		return fmt.Errorf("required flags missing: -p/--project, -i/--instance, -d/--database (or set SPANNER_PROJECT_ID, SPANNER_INSTANCE_ID, SPANNER_DATABASE_ID; see --help)")
+	}
+	return nil
+}
+
+func requireInteractiveTerminal(stdin, stdout *os.File) error {
+	if stdin == nil || stdout == nil {
+		return errors.New("spannersh requires an interactive terminal on stdin and stdout")
+	}
+	if !term.IsTerminal(int(stdin.Fd())) || !term.IsTerminal(int(stdout.Fd())) {
+		return errors.New("spannersh requires an interactive terminal on stdin and stdout; piping or redirection is not supported")
 	}
 	return nil
 }
@@ -194,6 +218,8 @@ func replHandleReadErr(err error, errOut io.Writer) (stop bool, loopErr error) {
 	case errors.Is(err, context.Canceled):
 		fmt.Fprintln(errOut, "\ninterrupted")
 		return true, err
+	case errors.Is(err, syscall.EAGAIN), errors.Is(err, syscall.EWOULDBLOCK):
+		return true, fmt.Errorf("interactive terminal became unavailable: %w", err)
 	default:
 		fmt.Fprintf(errOut, "ERROR: %v\n", err)
 		return false, nil
