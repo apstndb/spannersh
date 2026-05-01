@@ -19,6 +19,7 @@ type app struct {
 	out     io.Writer
 	db      *sql.DB
 	format  outputFormat
+	verbose bool
 	dialect databasepb.DatabaseDialect
 }
 
@@ -45,7 +46,7 @@ func (a *app) executeAndRenderContext(ctx context.Context, query string) error {
 		}
 		err = func() error {
 			defer head.rows.Close()
-			return displayResults(a.out, head.meta, head.rows, stmtKindsFromBatch(batch), a.format, a.dialect)
+			return displayResults(a.out, head.meta, head.rows, stmtKindsFromBatch(batch), a.format, a.verbose, a.dialect)
 		}()
 		if err != nil {
 			return err
@@ -100,7 +101,7 @@ func stmtKindsFromBatch(batch []preparedQuery) []stmtDisplayKind {
 }
 
 // displayResults walks one driver batch: each element of kinds matches one statement (metadata → rows → stats cycle).
-func displayResults(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql.Rows, kinds []stmtDisplayKind, format outputFormat, dialect databasepb.DatabaseDialect) error {
+func displayResults(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql.Rows, kinds []stmtDisplayKind, format outputFormat, verbose bool, dialect databasepb.DatabaseDialect) error {
 	if len(kinds) == 0 {
 		return nil
 	}
@@ -116,27 +117,27 @@ func displayResults(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql.Rows, 
 			}
 			rsm = nextRsm
 		}
-		if err := displayStatementResult(out, rsm, rows, kind, format, dialect); err != nil {
+		if err := displayStatementResult(out, rsm, rows, kind, format, verbose, dialect); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql.Rows, kind stmtDisplayKind, format outputFormat, dialect databasepb.DatabaseDialect) error {
+func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql.Rows, kind stmtDisplayKind, format outputFormat, verbose bool, dialect databasepb.DatabaseDialect) error {
 	switch kind {
 	case stmtDisplayQueryResult:
 		n, err := renderQueryResultData(out, rsm, rows, format, dialect)
 		if err != nil {
 			return err
 		}
-		return writeExecutionSummaryAfterDataRows(out, rows, n)
+		return writeExecutionSummaryAfterDataRows(out, rows, n, verbose)
 	default:
 		n, err := drainResultSet(rsm, rows)
 		if err != nil {
 			return err
 		}
-		return renderQueryPlan(out, rows, n, kind)
+		return renderQueryPlan(out, rows, n, kind, verbose)
 	}
 }
 
@@ -169,12 +170,12 @@ func fetchResultSetStatsAfterDataRows(rows *sql.Rows) (*sppb.ResultSetStats, err
 }
 
 // writeExecutionSummaryAfterDataRows reads the following result set as [ResultSetStats] and prints the execution summary (query_stats lines only when populated).
-func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCount int) error {
+func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCount int, verbose bool) error {
 	rss, err := fetchResultSetStatsAfterDataRows(rows)
 	if err != nil {
 		return err
 	}
-	formatExecutionSummary(out, rss, dataRowCount)
+	formatExecutionSummary(out, rss, dataRowCount, verbose)
 	return nil
 }
 

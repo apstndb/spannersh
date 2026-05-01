@@ -13,8 +13,16 @@ import (
 // Omitted from printed query_stats: user already typed the statement; it can be long or multiline.
 const queryStatsOmitQueryTextKey = "query_text"
 
+var defaultQueryStatsKeys = map[string]struct{}{
+	"cpu_time":                     {},
+	"deleted_rows_scanned":         {},
+	"optimizer_statistics_package": {},
+	"optimizer_version":            {},
+	"rows_scanned":                 {},
+}
+
 // formatExecutionSummary prints "N row(s) in set" and, when present, query_stats lines after it.
-func formatExecutionSummary(out io.Writer, rss *sppb.ResultSetStats, dataRowCount int) {
+func formatExecutionSummary(out io.Writer, rss *sppb.ResultSetStats, dataRowCount int, verbose bool) {
 	stats := queryStatsMap(rss)
 	n := effectiveRowCount(rss, dataRowCount)
 	fmt.Fprintln(out, rowsInSetLine(n, stats))
@@ -22,17 +30,17 @@ func formatExecutionSummary(out io.Writer, rss *sppb.ResultSetStats, dataRowCoun
 		fmt.Fprintln(out, "No execution statistics returned.")
 		return
 	}
-	writeQueryStatsDetails(out, stats)
+	writeQueryStatsDetails(out, stats, verbose)
 }
 
 // writeExecutionStatsDetails prints query_stats key/values only when the API populated it.
-func writeExecutionStatsDetails(out io.Writer, rss *sppb.ResultSetStats) {
-	writeQueryStatsDetails(out, queryStatsMap(rss))
+func writeExecutionStatsDetails(out io.Writer, rss *sppb.ResultSetStats, verbose bool) {
+	writeQueryStatsDetails(out, queryStatsMap(rss), verbose)
 }
 
-func writeQueryStatsDetails(out io.Writer, stats map[string]any) {
+func writeQueryStatsDetails(out io.Writer, stats map[string]any, verbose bool) {
 	if stats != nil {
-		writeQueryStatsLines(out, stats)
+		writeQueryStatsLines(out, stats, verbose)
 	}
 }
 
@@ -43,12 +51,12 @@ func queryStatsMap(rss *sppb.ResultSetStats) map[string]any {
 	return nil
 }
 
-func writeQueryStatsLines(out io.Writer, m map[string]any) {
+func writeQueryStatsLines(out io.Writer, m map[string]any, verbose bool) {
 	if len(m) == 0 {
 		fmt.Fprintln(out, "QueryStats: (empty)")
 		return
 	}
-	keys := slices.DeleteFunc(slices.Sorted(maps.Keys(m)), func(k string) bool { return k == queryStatsOmitQueryTextKey })
+	keys := queryStatsKeysForDisplay(m, verbose)
 	if len(keys) == 0 {
 		return
 	}
@@ -56,6 +64,19 @@ func writeQueryStatsLines(out io.Writer, m map[string]any) {
 	for _, k := range keys {
 		fmt.Fprintf(out, "%-*s: %v\n", maxKeyLen, k, m[k])
 	}
+}
+
+func queryStatsKeysForDisplay(m map[string]any, verbose bool) []string {
+	return slices.DeleteFunc(slices.Sorted(maps.Keys(m)), func(k string) bool {
+		if k == queryStatsOmitQueryTextKey {
+			return true
+		}
+		if verbose {
+			return false
+		}
+		_, ok := defaultQueryStatsKeys[k]
+		return !ok
+	})
 }
 
 func effectiveRowCount(rss *sppb.ResultSetStats, dataRowCount int) int {

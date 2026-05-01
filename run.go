@@ -37,6 +37,7 @@ type cliOpts struct {
 	Project     string `short:"p" name:"project" env:"SPANNER_PROJECT_ID" placeholder:"PROJECT" help:"Google Cloud Project ID. Default: ${env}."`
 	Instance    string `short:"i" name:"instance" env:"SPANNER_INSTANCE_ID" placeholder:"INSTANCE" help:"Spanner instance ID. Default: ${env}."`
 	Database    string `short:"d" name:"database" env:"SPANNER_DATABASE_ID" placeholder:"DATABASE" help:"Database ID. Default: ${env}."`
+	Verbose     bool   `short:"v" name:"verbose" help:"Print the full query_stats block instead of the default summary subset."`
 	// DSNSuffix is appended to the base projects/.../instances/.../databases/... DSN.
 	// It is passed through to go-sql-spanner connection properties after minimal trimming.
 	DSNSuffix string `name:"dsn-suffix" placeholder:"PARAMS" help:"Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs."`
@@ -181,6 +182,7 @@ func openCLIApp(ctx context.Context, out, errOut io.Writer, opts cliOpts) (*app,
 		out:     out,
 		db:      db,
 		format:  outputFormatFromString(opts.Format),
+		verbose: opts.Verbose,
 		dialect: resolveEffectiveDialect(ctx, errOut, db, dialectEnum, autoDialect),
 	}, nil
 }

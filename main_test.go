@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -350,6 +351,16 @@ func TestParseCLIOptsHelpRequestsExit(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptsVerbose(t *testing.T) {
+	opts, err := parseCLIOpts([]string{"-v"}, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.Verbose {
+		t.Fatal("expected -v to enable verbose query_stats output")
+	}
+}
+
 func TestRequireInteractiveTerminalRejectsPipes(t *testing.T) {
 	inReader, inWriter, err := os.Pipe()
 	if err != nil {
@@ -388,6 +399,36 @@ func TestReplHandleReadErrStopsOnTTYUnavailable(t *testing.T) {
 	}
 	if loopErr == nil || !strings.Contains(loopErr.Error(), "interactive terminal became unavailable") {
 		t.Fatalf("loopErr = %v, want interactive-terminal error", loopErr)
+	}
+}
+
+func TestQueryStatsKeysForDisplayDefaultSubset(t *testing.T) {
+	keys := queryStatsKeysForDisplay(map[string]any{
+		"cpu_time":                     "1 ms",
+		"elapsed_time":                 "2 ms",
+		"optimizer_statistics_package": "auto_20260101_00_00_00UTC",
+		"optimizer_version":            "latest",
+		"query_text":                   "SELECT 1",
+		"rows_scanned":                 3,
+		"timestamp_lower_bound":        "ignored",
+	}, false)
+	want := []string{"cpu_time", "optimizer_statistics_package", "optimizer_version", "rows_scanned"}
+	if !slices.Equal(keys, want) {
+		t.Fatalf("keys = %v, want %v", keys, want)
+	}
+}
+
+func TestQueryStatsKeysForDisplayVerbose(t *testing.T) {
+	keys := queryStatsKeysForDisplay(map[string]any{
+		"cpu_time":          "1 ms",
+		"elapsed_time":      "2 ms",
+		"optimizer_version": "latest",
+		"query_text":        "SELECT 1",
+		"rows_scanned":      3,
+	}, true)
+	want := []string{"cpu_time", "elapsed_time", "optimizer_version", "rows_scanned"}
+	if !slices.Equal(keys, want) {
+		t.Fatalf("keys = %v, want %v", keys, want)
 	}
 }
 

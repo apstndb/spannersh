@@ -46,7 +46,7 @@ func renderQueryResultData(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql
 
 // renderQueryPlan prints EXPLAIN (PLAN) or EXPLAIN ANALYZE (PROFILE) output. PLAN does not populate
 // QueryStats in general; we only show the plan tree. PROFILE shows the plan first, then row count, then query_stats when the API returns it.
-func renderQueryPlan(out io.Writer, rows *sql.Rows, drainedRowCount int, kind stmtDisplayKind) error {
+func renderQueryPlan(out io.Writer, rows *sql.Rows, drainedRowCount int, kind stmtDisplayKind, verbose bool) error {
 	rss, err := fetchResultSetStatsAfterDataRows(rows)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func renderQueryPlan(out io.Writer, rows *sql.Rows, drainedRowCount int, kind st
 		stats := queryStatsMap(rss)
 		n := effectiveRowCount(rss, drainedRowCount)
 		fmt.Fprintln(out, rowsInSetLine(n, stats))
-		writeQueryStatsDetails(out, stats)
+		writeQueryStatsDetails(out, stats, verbose)
 	case stmtDisplayPlanOnlyPlan:
 		// plan tree only (already printed above)
 	default:

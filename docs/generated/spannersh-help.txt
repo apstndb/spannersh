@@ -8,6 +8,7 @@ Flags:
   -p, --project=PROJECT      Google Cloud Project ID. Default: SPANNER_PROJECT_ID.
   -i, --instance=INSTANCE    Spanner instance ID. Default: SPANNER_INSTANCE_ID.
   -d, --database=DATABASE    Database ID. Default: SPANNER_DATABASE_ID.
+  -v, --verbose              Print the full query_stats block instead of the default summary subset.
       --dsn-suffix=PARAMS    Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs.
       --dialect=DIALECT      Client-side SQL parser dialect: auto, google-standard-sql, or postgresql. PostgreSQL adds dialect=POSTGRESQL to the DSN unless --dsn-suffix already sets dialect=.
       --format=FORMAT        Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree.
