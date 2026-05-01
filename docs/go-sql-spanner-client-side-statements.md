@@ -9,7 +9,7 @@
 | Parser (keywords, syntax) | `parser/statement_parser.go`: `clientSideKeywords`, `ParseClientSideStatement`, and `parser/statements.go` |
 | Execution (Exec / Query behavior) | Package `statements.go`: `createExecutableStatement` and each `executable*` |
 
-This repo’s `go.mod` assumes **`github.com/googleapis/go-sql-spanner v1.25.0`**. After upgrading, diff behavior in **upstream**.
+This repo’s `go.mod` assumes **`github.com/googleapis/go-sql-spanner v1.25.1`**. After upgrading, diff behavior in **upstream**.
 
 ---
 

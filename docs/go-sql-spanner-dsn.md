@@ -1,11 +1,12 @@
-# go-sql-spanner DSN reference
+# go-sql-spanner connection properties reference
 
-This document summarizes connection string (DSN) shape and parameters for [go-sql-spanner](https://github.com/googleapis/go-sql-spanner). **Upstream is always canonical.**
+This document summarizes **go-sql-spanner connection properties** and how they appear in both the connection string (DSN) and client-side `SHOW` / `SET` / `RESET` statements. **Upstream is always canonical.**
 
 | Reference | URL |
 |-----------|-----|
 | Module (version, API) | [pkg.go.dev/github.com/googleapis/go-sql-spanner](https://pkg.go.dev/github.com/googleapis/go-sql-spanner) |
 | Repository README and samples | [github.com/googleapis/go-sql-spanner](https://github.com/googleapis/go-sql-spanner) |
+| Cloud Spanner driver capabilities overview | [docs.cloud.google.com/spanner/docs/drivers-overview](https://docs.cloud.google.com/spanner/docs/drivers-overview) |
 | Driver implementation (DSN regex and comments) | `driver.go` around `dsnRegExp` / `dsnRegExpString` |
 
 This repo pins a version in `go.mod` and references **`github.com/googleapis/go-sql-spanner`** `connection_properties.go`.
@@ -17,18 +18,35 @@ New driver versions may add or change parameters—verify behavior in **upstream
 
 ---
 
-## Connection properties, DSN, and SHOW/SET
+## How this relates to spannersh
 
-go-sql-spanner holds per-connection state as **connection properties** (defined in `connection_properties.go`).
+**spannersh** delegates execution to **go-sql-spanner** via Go's `database/sql` integration. That means driver features documented in the official Cloud Spanner [drivers overview](https://docs.cloud.google.com/spanner/docs/drivers-overview) for the Go `database/sql` path are generally available here through the driver, rather than being re-implemented in this repository.
 
-- The **`name`** in DSN `name=value` is the connection property identifier (see the “Parameter” column below).
-- **`SHOW …` / `SET …` / `RESET …`** client-side statements use the **same property names**. Syntax details (e.g. GoogleSQL requires `SHOW VARIABLE …`) are in **[go-sql-spanner-client-side-statements.md](./go-sql-spanner-client-side-statements.md)**.
+This document is therefore mainly about the **driver property model** that **spannersh** exposes through:
 
-So **DSN keys** and **SHOW/SET names** share one namespace. Value formats and meanings are shared between DSN and runtime settings; **when** a property applies differs by property (e.g. startup-only vs runtime). Check each property’s **`ContextStartup` / `ContextUser`** and description in source.
+- `--dsn-suffix` at startup
+- client-side `SHOW` / `SET` / `RESET` statements after connect
 
 ---
 
-## DSN shape
+## One property namespace; DSN is one input path
+
+go-sql-spanner holds per-connection state as **connection properties** (defined in `connection_properties.go`).
+
+- The **`name`** in DSN `name=value` is the connection property identifier.
+- **`SHOW …` / `SET …` / `RESET …`** client-side statements use the **same property names**. Syntax details (e.g. GoogleSQL requires `SHOW VARIABLE …`) are in **[go-sql-spanner-client-side-statements.md](./go-sql-spanner-client-side-statements.md)**.
+- **`--dsn-suffix`** in **spannersh** is just a way to append these same property names to the startup DSN.
+
+So **DSN keys** and **SHOW/SET names** share one namespace. Value formats and meanings are shared between DSN and runtime settings; what changes is **when** a property can be applied:
+
+- **`ContextStartup`** properties must be set when opening the connection, typically through the DSN / `--dsn-suffix`.
+- **`ContextUser`** properties are session/runtime settings and can generally be inspected with `SHOW` and updated with `SET` / `RESET`.
+
+Check each property's `ContextStartup` / `ContextUser` and description in upstream source.
+
+---
+
+## DSN shape (one way to set startup properties)
 
 The connection name consists of (summarized from `driver.go`):
 
@@ -181,7 +199,7 @@ The grouped tables above are for quick orientation. The table below lists **ever
 
 ---
 
-## How spannersh passes parameters
+## How spannersh passes properties into the driver
 
 The shell builds `projects/.../databases/...` from **`-p` / `-i` / `-d`** and appends **`name=value`** pairs from **`--dsn-suffix`**, separated by **`;`**.
 
@@ -190,4 +208,4 @@ spannersh -p PROJECT -i INSTANCE -d DATABASE \
   --dsn-suffix 'use_plain_text=true;connect_timeout=30s'
 ```
 
-The suffix is concatenated verbatim into the DSN. Valid keys and values follow **go-sql-spanner** docs and source. Inside the shell you can also use **`SHOW VARIABLE …` / `SET …`** with the same names (syntax: [go-sql-spanner-client-side-statements.md](./go-sql-spanner-client-side-statements.md)).
+The suffix is concatenated verbatim into the DSN. So `--dsn-suffix` is not a separate configuration system—it is simply a way to provide **go-sql-spanner connection properties** at startup. Inside the shell you can also use **`SHOW VARIABLE …` / `SET …`** with the same property names (syntax: [go-sql-spanner-client-side-statements.md](./go-sql-spanner-client-side-statements.md)).

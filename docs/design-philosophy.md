@@ -8,7 +8,7 @@ This tool is an **interactive shell for Google Cloud Spanner** and aims to stay 
 |------|--------|
 | Connection, DSN, dialect, transactions, routing SELECT/DML/DDL | **[go-sql-spanner](https://github.com/googleapis/go-sql-spanner)** (and the Spanner client behind it). No custom SQL engine or connection state machine here. |
 | Execution path | Prefer a single **`database/sql` `QueryContext`**. The driver interprets `SELECT`, DML, DDL, and client-side statements. |
-| Connection property names and meanings | **Upstream definitions** are canonical. DSN docs here are reference; **mechanical extraction** of names is available via `tools/genprops` from `connection_properties.go`. |
+| Connection property names and meanings | **Upstream definitions** are canonical. The local docs describe driver properties first and DSN usage second; **mechanical extraction** of names is available via `tools/genprops` from `connection_properties.go`. |
 
 ## Responsibilities specific to this repository
 
@@ -29,6 +29,6 @@ Split **`main`** across **several files** so **filenames hint at roles**. Growin
 ## Related documentation
 
 - [README.md](../README.md) — usage and design entry
-- [go-sql-spanner-dsn.md](./go-sql-spanner-dsn.md) — DSN and connection properties (summary + alphabetical table)
+- [go-sql-spanner-dsn.md](./go-sql-spanner-dsn.md) — driver properties, DSN shape, and shared `SHOW` / `SET` names
 - [generated/connection-properties.generated.md](./generated/connection-properties.generated.md) — connection property list (`go generate` / `tools/genprops`)
 - [go-sql-spanner-client-side-statements.md](./go-sql-spanner-client-side-statements.md) — client-side statements

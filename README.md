@@ -6,6 +6,8 @@ Yet another interactive tool for [Google Cloud Spanner](https://cloud.google.com
 
 It stays intentionally simple by reusing existing Go packages for the driver, REPL, plan rendering, and value formatting instead of re-implementing that machinery in this repository.
 
+Because **spannersh** delegates query execution to [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) through Go's [`database/sql`](https://pkg.go.dev/database/sql), it can use the Cloud Spanner driver capabilities documented in the official [drivers overview](https://docs.cloud.google.com/spanner/docs/drivers-overview) for the Go `database/sql` path. This repository mainly adds the interactive shell, client-side `EXPLAIN` handling, and result rendering on top of that driver behavior.
+
 ## Prerequisites
 
 - Go 1.26.2+
@@ -179,7 +181,7 @@ total_memory_peak_usage_byte: 112
 
 | Document | Contents |
 |----------|----------|
-| [docs/go-sql-spanner-dsn.md](docs/go-sql-spanner-dsn.md) | DSN shape and connection properties |
+| [docs/go-sql-spanner-dsn.md](docs/go-sql-spanner-dsn.md) | Driver properties, DSN shape, and shared `SHOW` / `SET` names |
 | [docs/go-sql-spanner-client-side-statements.md](docs/go-sql-spanner-client-side-statements.md) | Client-side statements (`SHOW` / `SET`, etc.) |
 | [docs/generated/connection-properties.generated.md](docs/generated/connection-properties.generated.md) | Generated connection-property table from upstream `go-sql-spanner` |
 
