@@ -108,7 +108,7 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 
 	table.Header(renderHeader(metadata.GetRowType().GetFields(), dialect))
 
-	fcCLI := spanvalue.SpannerCLICompatibleFormatConfig()
+	fcCLI := spannerCLITableFormatConfig()
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		ss, err := renderTableCells(dialect, fcCLI, values)
 		if err != nil {
@@ -142,7 +142,7 @@ func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) str
 }
 
 // renderTableCells uses [spanpg.FormatColumnSimple] for PostgreSQL dialect (human-readable PG-oriented scalars);
-// GoogleSQL uses [spanvalue.SpannerCLICompatibleFormatConfig] like the Cloud Spanner CLI.
+// GoogleSQL uses the Cloud Spanner CLI-compatible formatter, but renders STRUCT with tuple-style parentheses.
 func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		ss := make([]string, 0, len(values))
@@ -156,6 +156,12 @@ func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatCo
 		return ss, nil
 	}
 	return renderColumns(fc, values)
+}
+
+func spannerCLITableFormatConfig() *spanvalue.FormatConfig {
+	fc := spanvalue.SpannerCLICompatibleFormatConfig()
+	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
+	return fc
 }
 
 func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.GenericColumnValue, error) {
