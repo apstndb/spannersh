@@ -1,2 +1,3 @@
 [tools]
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
 "go:github.com/apstndb/ptyhelp" = "0.2.2"

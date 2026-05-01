@@ -23,8 +23,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.4.28
+          install: true
+          cache: true
+
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+        run: mise exec -- govulncheck ./...
 
   codeql:
     runs-on: ubuntu-latest
