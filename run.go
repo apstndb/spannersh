@@ -34,9 +34,15 @@ type cliOpts struct {
 	Project     string `short:"p" name:"project" env:"SPANNER_PROJECT_ID" placeholder:"PROJECT" help:"Google Cloud Project ID. Default: ${env}."`
 	Instance    string `short:"i" name:"instance" env:"SPANNER_INSTANCE_ID" placeholder:"INSTANCE" help:"Spanner instance ID. Default: ${env}."`
 	Database    string `short:"d" name:"database" env:"SPANNER_DATABASE_ID" placeholder:"DATABASE" help:"Database ID. Default: ${env}."`
-	DSNSuffix   string `name:"dsn-suffix" placeholder:"PARAMS" help:"Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs."`
-	Dialect     string `name:"dialect" default:"auto" placeholder:"DIALECT" help:"Client-side SQL parser dialect: auto, google-standard-sql, or postgresql. PostgreSQL adds dialect=POSTGRESQL to the DSN unless --dsn-suffix already sets dialect=."`
-	Format      string `name:"format" default:"table" placeholder:"FORMAT" help:"Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree."`
+	// DSNSuffix is appended to the base projects/.../instances/.../databases/... DSN.
+	// It is passed through to go-sql-spanner connection properties after minimal trimming.
+	DSNSuffix string `name:"dsn-suffix" placeholder:"PARAMS" help:"Extra go-sql-spanner DSN parameters (snake_case; semicolon-separated). See docs."`
+	// Dialect affects only spannersh's client-side parsing and DSN composition.
+	// "auto" reads the driver's database_dialect property after connect; explicit PostgreSQL
+	// also prepends dialect=POSTGRESQL to the DSN unless --dsn-suffix already set dialect=.
+	Dialect string `name:"dialect" default:"auto" placeholder:"DIALECT" help:"Client-side SQL parser dialect: auto, google-standard-sql, or postgresql. PostgreSQL adds dialect=POSTGRESQL to the DSN unless --dsn-suffix already sets dialect=."`
+	// Format selects result-set rendering only. EXPLAIN / EXPLAIN ANALYZE plan trees ignore it.
+	Format string `name:"format" default:"table" placeholder:"FORMAT" help:"Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree."`
 }
 
 type cliExitError struct {

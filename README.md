@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/apstndb/spannersh/actions/workflows/ci.yml/badge.svg)](https://github.com/apstndb/spannersh/actions/workflows/ci.yml)
 
-Interactive shell for [Google Cloud Spanner](https://cloud.google.com/spanner): run SQL from the terminal, print result tables (with column types), and show the query plan.
+Yet another interactive tool for [Google Cloud Spanner](https://cloud.google.com/spanner), following [cloudspannerecosystem/spanner-cli](https://github.com/cloudspannerecosystem/spanner-cli) (the basis of the current official Spanner CLI) and [apstndb/spanner-mycli](https://github.com/apstndb/spanner-mycli): run SQL from the terminal, print result tables (with column types), and show the query plan.
 
 ## Prerequisites
 
@@ -59,13 +59,13 @@ Flags:
 
 | Flag | Meaning |
 |------|---------|
-| `--version` | Print version and exit: `-ldflags "-X main.version=..."` if not `dev`, else module version from build metadata (`go install @tag`), else `dev` |
+| `--version` | Print version and exit. |
 | `-p`, `--project` | GCP project ID (required unless set). Default: env `SPANNER_PROJECT_ID`. |
 | `-i`, `--instance` | Spanner instance ID (required unless set). Default: env `SPANNER_INSTANCE_ID`. |
 | `-d`, `--database` | Database ID (required unless set). Default: env `SPANNER_DATABASE_ID`. |
-| `--dialect` | **Client-side** dialect for [go-sql-spanner `parser.Split`](https://pkg.go.dev/github.com/googleapis/go-sql-spanner/parser) (multi-statement input, `EXPLAIN` stripping). **`auto`** (default): do **not** add `dialect=` to the DSN (unless **`--dsn-suffix`** sets it)—**go-sql-spanner** resolves the database dialect when the connection is first used (internally via `INFORMATION_SCHEMA`). **spannersh** then reads the driver’s read-only **`database_dialect`** connection property with a client-side **`SHOW`** (no second `INFORMATION_SCHEMA` round trip from the shell); if that fails, client-side parsing falls back to **GoogleSQL** with a warning on **stderr**. **`google-standard-sql`** / **`postgresql`**: skip that read and use the given dialect (aliases: `googlesql`, `postgres`, `pg`). For **`postgresql`**, the DSN gets a leading **`dialect=POSTGRESQL`** unless **`--dsn-suffix` already sets `dialect=`**. With **`postgresql`**, default **`table`** output uses [spanpg](https://github.com/apstndb/spanpg) for PostgreSQL type labels and cell formatting. |
-| `--dsn-suffix` | Optional extra [go-sql-spanner](https://pkg.go.dev/github.com/googleapis/go-sql-spanner) DSN parameters, appended after `projects/.../databases/...` with a separating `;`. Use **`;`-separated `name=value` pairs**. See **[docs/go-sql-spanner-dsn.md](docs/go-sql-spanner-dsn.md)** (DSN and connection properties) and **[docs/go-sql-spanner-client-side-statements.md](docs/go-sql-spanner-client-side-statements.md)** (`SHOW` / `SET` / batch / `RUN PARTITIONED QUERY`, etc.). |
-| `--format` | Result row output: **`table`** (default), **`csv`**, or **`jsonl`** — **case-insensitive**; unknown values default to `table`. **`table`**: ASCII table with types in the header. **`csv`**: header + comma-separated cells as JSON via [spanvalue](https://github.com/apstndb/spanvalue). **`jsonl`**: one JSON object per row. **`EXPLAIN` / `EXPLAIN ANALYZE`**: plan tree when the backend returns plan nodes; **`EXPLAIN ANALYZE`** then **`N row(s) in set`** and a **`query_stats`** block only when the API returns it. **`EXPLAIN`** does not print a row summary or stats (PLAN mode usually has no **`QueryStats`**). |
+| `--dialect` | SQL dialect for client-side parsing: `auto` (default), `google-standard-sql`, or `postgresql`. |
+| `--dsn-suffix` | Extra [go-sql-spanner](https://pkg.go.dev/github.com/googleapis/go-sql-spanner) DSN parameters as `;`-separated `name=value` pairs. See **[docs/go-sql-spanner-dsn.md](docs/go-sql-spanner-dsn.md)** and **[docs/go-sql-spanner-client-side-statements.md](docs/go-sql-spanner-client-side-statements.md)**. |
+| `--format` | Result output format: `table` (default), `csv`, or `jsonl`. |
 
 End each statement with a **semicolon** (`;`) and press Enter to run it. Multiple lines are supported until the line ending is `;`.
 
