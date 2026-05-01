@@ -300,7 +300,7 @@ func TestRenderHeader(t *testing.T) {
 }
 
 func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
-	fc := spannerCLITableFormatConfig()
+	fc := spannerCLITableFormatConfig
 	structValue := testStructGenericColumnValue()
 	arrayValue := testArrayOfStructGenericColumnValue()
 
@@ -487,8 +487,9 @@ func testStructGenericColumnValue() spanner.GenericColumnValue {
 		},
 	}
 	return spanner.GenericColumnValue{
-		Type:  structType,
-		Value: testListValue(testInt64Value("1"), testStringValue("foo")),
+		Type: structType,
+		// Spanner encodes INT64 values as strings in protobuf Value.
+		Value: testListValue(structpb.NewStringValue("1"), structpb.NewStringValue("foo")),
 	}
 }
 
@@ -501,14 +502,6 @@ func testArrayOfStructGenericColumnValue() spanner.GenericColumnValue {
 		},
 		Value: testListValue(structValue.Value),
 	}
-}
-
-func testInt64Value(s string) *structpb.Value {
-	return structpb.NewStringValue(s)
-}
-
-func testStringValue(s string) *structpb.Value {
-	return structpb.NewStringValue(s)
 }
 
 func testListValue(values ...*structpb.Value) *structpb.Value {

@@ -20,6 +20,12 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 )
 
+var spannerCLITableFormatConfig = func() *spanvalue.FormatConfig {
+	fc := spanvalue.SpannerCLICompatibleFormatConfig()
+	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
+	return fc
+}()
+
 func writeStringWithTrailingNewline(out io.Writer, s string) {
 	fmt.Fprint(out, s)
 	if !strings.HasSuffix(s, "\n") {
@@ -108,7 +114,10 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 
 	table.Header(renderHeader(metadata.GetRowType().GetFields(), dialect))
 
-	fcCLI := spannerCLITableFormatConfig()
+	var fcCLI *spanvalue.FormatConfig
+	if dialect != databasepb.DatabaseDialect_POSTGRESQL {
+		fcCLI = spannerCLITableFormatConfig
+	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		ss, err := renderTableCells(dialect, fcCLI, values)
 		if err != nil {
@@ -156,12 +165,6 @@ func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatCo
 		return ss, nil
 	}
 	return renderColumns(fc, values)
-}
-
-func spannerCLITableFormatConfig() *spanvalue.FormatConfig {
-	fc := spanvalue.SpannerCLICompatibleFormatConfig()
-	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
-	return fc
 }
 
 func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.GenericColumnValue, error) {
