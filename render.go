@@ -114,12 +114,8 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 
 	table.Header(renderHeader(metadata.GetRowType().GetFields(), dialect))
 
-	var fcCLI *spanvalue.FormatConfig
-	if dialect != databasepb.DatabaseDialect_POSTGRESQL {
-		fcCLI = spannerCLITableFormatConfig
-	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
-		ss, err := renderTableCells(dialect, fcCLI, values)
+		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, values)
 		if err != nil {
 			return err
 		}
