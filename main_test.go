@@ -12,12 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/spanner"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
 	"github.com/apstndb/spantype"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
 	"github.com/hymkor/go-multiline-ny"
 	"github.com/nyaosorg/go-ttyadapter/tty10pe"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestParseCLIDialect(t *testing.T) {
@@ -297,6 +299,28 @@ func TestRenderHeader(t *testing.T) {
 	})
 }
 
+func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
+	fc := spannerCLITableFormatConfig
+	structValue := testStructGenericColumnValue()
+	arrayValue := testArrayOfStructGenericColumnValue()
+
+	gotStruct, err := fc.FormatToplevelColumn(structValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotStruct != "(1, foo)" {
+		t.Fatalf("struct format = %q, want %q", gotStruct, "(1, foo)")
+	}
+
+	gotArray, err := fc.FormatToplevelColumn(arrayValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotArray != "[(1, foo)]" {
+		t.Fatalf("array-of-struct format = %q, want %q", gotArray, "[(1, foo)]")
+	}
+}
+
 func TestFinishCSVWriteReportsFlushError(t *testing.T) {
 	flushErr := errors.New("flush failed")
 	if err := finishCSVWrite(func() error { return flushErr }, nil); !errors.Is(err, flushErr) {
@@ -450,4 +474,36 @@ func TestContextWithInterruptCancelsChildOnly(t *testing.T) {
 		t.Fatal("parent context should remain active after one interrupt")
 	default:
 	}
+}
+
+func testStructGenericColumnValue() spanner.GenericColumnValue {
+	structType := &sppb.Type{
+		Code: sppb.TypeCode_STRUCT,
+		StructType: &sppb.StructType{
+			Fields: []*sppb.StructType_Field{
+				{Name: "n", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
+				{Name: "s", Type: &sppb.Type{Code: sppb.TypeCode_STRING}},
+			},
+		},
+	}
+	return spanner.GenericColumnValue{
+		Type: structType,
+		// Spanner encodes INT64 values as strings in protobuf Value.
+		Value: testListValue(structpb.NewStringValue("1"), structpb.NewStringValue("foo")),
+	}
+}
+
+func testArrayOfStructGenericColumnValue() spanner.GenericColumnValue {
+	structValue := testStructGenericColumnValue()
+	return spanner.GenericColumnValue{
+		Type: &sppb.Type{
+			Code:             sppb.TypeCode_ARRAY,
+			ArrayElementType: structValue.Type,
+		},
+		Value: testListValue(structValue.Value),
+	}
+}
+
+func testListValue(values ...*structpb.Value) *structpb.Value {
+	return structpb.NewListValue(&structpb.ListValue{Values: values})
 }

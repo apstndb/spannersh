@@ -20,6 +20,12 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 )
 
+var spannerCLITableFormatConfig = func() *spanvalue.FormatConfig {
+	fc := spanvalue.SpannerCLICompatibleFormatConfig()
+	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
+	return fc
+}()
+
 func writeStringWithTrailingNewline(out io.Writer, s string) {
 	fmt.Fprint(out, s)
 	if !strings.HasSuffix(s, "\n") {
@@ -108,9 +114,8 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 
 	table.Header(renderHeader(metadata.GetRowType().GetFields(), dialect))
 
-	fcCLI := spanvalue.SpannerCLICompatibleFormatConfig()
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
-		ss, err := renderTableCells(dialect, fcCLI, values)
+		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, values)
 		if err != nil {
 			return err
 		}
@@ -142,7 +147,7 @@ func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) str
 }
 
 // renderTableCells uses [spanpg.FormatColumnSimple] for PostgreSQL dialect (human-readable PG-oriented scalars);
-// GoogleSQL uses [spanvalue.SpannerCLICompatibleFormatConfig] like the Cloud Spanner CLI.
+// GoogleSQL uses the Cloud Spanner CLI-compatible formatter, but renders STRUCT with tuple-style parentheses.
 func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		ss := make([]string, 0, len(values))
