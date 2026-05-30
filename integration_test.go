@@ -51,10 +51,20 @@ func openIntegrationDBPostgreSQL(t *testing.T) *sql.DB {
 
 func integrationExecOutput(t *testing.T, sql string) string {
 	t.Helper()
-	db := openIntegrationDB(t)
+	return integrationExecOutputFormat(t, outputFormatTable, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL, sql)
+}
+
+func integrationExecOutputFormat(t *testing.T, format outputFormat, dialect databasepb.DatabaseDialect, sqlText string) string {
+	t.Helper()
+	var db *sql.DB
+	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
+		db = openIntegrationDBPostgreSQL(t)
+	} else {
+		db = openIntegrationDB(t)
+	}
 	var buf bytes.Buffer
-	cli := &app{ctx: t.Context(), out: &buf, db: db, format: outputFormatTable, dialect: databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL}
-	if err := cli.executeAndRender(sql); err != nil {
+	cli := &app{ctx: t.Context(), out: &buf, db: db, format: format, dialect: dialect}
+	if err := cli.executeAndRender(sqlText); err != nil {
 		t.Fatal(err)
 	}
 	return buf.String()
@@ -234,6 +244,24 @@ func TestIntegrationPostgreSQLCSVExport(t *testing.T) {
 	out := integrationPostgreSQLExecOutput(t, outputFormatCSV, "SELECT 42 AS answer;")
 	if !strings.Contains(out, "answer") || !strings.Contains(out, "42") {
 		t.Fatalf("expected csv header and value, got:\n%s", out)
+	}
+}
+
+func TestIntegrationGoogleSQLCSVExport(t *testing.T) {
+	out := integrationExecOutputFormat(t, outputFormatCSV, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL, "SELECT 42 AS answer;")
+	if !strings.Contains(out, "answer") || !strings.Contains(out, "42") {
+		t.Fatalf("expected csv header and value, got:\n%s", out)
+	}
+}
+
+// Zero-row SELECT still emits a CSV header via spanvalue writer Flush (v0.4+).
+func TestIntegrationCSVZeroRows(t *testing.T) {
+	out := integrationExecOutputFormat(t, outputFormatCSV, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL, "SELECT 1 AS x LIMIT 0;")
+	if !strings.Contains(out, "x") {
+		t.Fatalf("expected csv column header x, got:\n%s", out)
+	}
+	if !strings.Contains(out, "0 rows in set") {
+		t.Fatalf("expected zero-row summary, got:\n%s", out)
 	}
 }
 

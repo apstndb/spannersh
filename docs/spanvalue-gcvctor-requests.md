@@ -1,85 +1,60 @@
-# Notes: requests for spanvalue / gcvctor
+# Notes: spanvalue / gcvctor feedback (spannersh)
 
-This memo summarizes **library-side wishes** from experience using [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) + `database/sql` + **`DecodeOptionProto`** in this repo ([spannersh](https://github.com/apstndb/spannersh)). Prioritization and adoption are up to upstream.
+This memo records **upstream feedback** from [spannersh](https://github.com/apstndb/spannersh) using [go-sql-spanner](https://github.com/googleapis/go-sql-spanner) + `database/sql` + **`DecodeOptionProto`**. Prioritization is up to spanvalue / gcvctor.
 
-**Tracking / implementation:** [apstndb/spanvalue#13](https://github.com/apstndb/spanvalue/issues/13) landed in [v0.1.10](https://github.com/apstndb/spanvalue/releases/tag/v0.1.10) as **`FormatRowColumns` / `FormatRowJSONObjectFromColumns` / `ColumnNames`**. This repo depends on **`spanvalue v0.2.0+`** and uses these for **CSV / JSONL** output (`render.go`; **`ColumnNames` returns an error** on invalid / colliding generated names). v0.1.10 also consolidates default **`FormatConfig`** behind **constructor functions** (e.g. `SpannerCLICompatibleFormatConfig()`).
+**Adopted in this repo (spanvalue v0.4.2):** [apstndb/spanvalue#13](https://github.com/apstndb/spanvalue/issues/13) (`ColumnNames`, `FormatRowColumns`, `FormatRowJSONObjectFromColumns`), **`writer.NewCSVWriter` / `NewJSONLWriter`** with **`WithMetadata`**, **`WithFormatter`**, **`WithUnnamedFieldNamer`**, and **`Flush`** for header-only zero-row CSV. See `render.go`.
 
----
-
-## Background
-
-- Query results are often read from `*sql.Rows` with columns as **`[]spanner.GenericColumnValue`** (GCV).
-- Existing **`spanvalue.FormatRowJSONObject`** targets `*spanner.Row`; a thin row-level API for **GCV + metadata only** forces callers to loop `FormatToplevelColumn` per column.
-- **Rendering (GCV → string)**, **construction (value → GCV)**, and **parsing (string → GCV)** are different responsibilities.
+**Explicit non-goal for spanvalue:** **`database/sql` `*sql.Rows` support** (no request to add `sql.Rows` iterators or drivers into spanvalue). spannersh keeps a thin **`scanValues` → `[]GenericColumnValue` → `WriteGCVs`** loop; that boundary is intentional.
 
 ---
 
-## Requests for spanvalue
+## Still useful upstream (spanvalue)
 
-### 1. Row-level API for `database/sql` / GCV (JSON)
+### 1. Documentation: go-sql-spanner + GCV recipes
 
-**Goal:** A counterpart to `FormatRowJSONObject` for **rows of GCVs**.
+A short doc page (or README section) with end-to-end patterns:
 
-**Upstream approach ([apstndb/spanvalue#13](https://github.com/apstndb/spanvalue/issues/13)):** Extract column names to `[]string`, then build cell rows and JSON rows.
+- Proto decode + `ResultSetMetadata` → column names via **`ColumnNames(fields, IndexedUnnamedFieldNamer)`** (same namer as writers).
+- **Table / CLI text:** `SpannerCLICompatibleFormatConfig()` + **`FormatRowColumns`** (or per-cell `FormatToplevelColumn`).
+- **CSV / JSONL:** `writer.NewCSVWriter` / `NewJSONLWriter` with shared options; **`WriteGCVs`**; call **`Flush`** after iteration so **zero-row** SELECT still emits a **CSV header** (v0.4+); note JSONL **`Flush` is a no-op**.
 
-**Preference:** **`ColumnNames` + `FormatRowJSONObjectFromColumns`** shares more with CSV (`FormatRowColumns`) than a single **`FormatRowJSONObjectFromGCV(fields, values, namer)`** from the first draft of this memo.
+Reduces duplicate “missing API” questions now that writers exist.
 
-**Assumptions**
+### 2. Shared export-writer option helper
 
-- `len(columnNames) != len(values)` (and the `FormatRowColumns` side) returns **`error`**.
-- `fc` is expected to use **`JSONFormatConfig()`**.
-- `namer` and empty keys stay consistent with existing `FormatRowJSONObject` per the issue.
+`DelimitedOption` and `JSONLOption` are separate interfaces; callers often repeat the same triple (`WithMetadata`, `WithFormatter`, `WithUnnamedFieldNamer`). A small helper (e.g. options applied to both writer kinds, or a struct copied into each constructor) would avoid duplicated setup in apps like spannersh (`spanvalueDelimitedWriterOptions` / `spanvalueJSONLWriterOptions` in `render.go`).
 
-**Optional extensions (outside the issue)**
+### 3. Clarify metadata naming vs `ColumnNames`
 
-- A variant that writes to `io.Writer` (JSONL)—not required.
+`WithMetadata` builds internal names from raw `StructType.Field` names; **`resolvedNames()`** applies `UnnamedFieldNamer` on write. Table headers printed outside the writer should use **`ColumnNames`** with the **same** namer—worth stating in writer package docs to prevent `_0` mismatches between header and CSV/JSONL.
 
-### 2. Thin helper flattening a row to `[]string` (CSV)
+### 4. Non-goals (unchanged)
 
-**Goal:** Keep CSV in **`encoding/csv`**; spanvalue stops at **enumerating cell strings**.
-
-**Upstream approach ([apstndb/spanvalue#13](https://github.com/apstndb/spanvalue/issues/13)):** `FormatRowColumns` returns the cell row; add the header with `ColumnNames` + `csv.Writer.Write`.
-
-The first-draft name `FormatRowCells` is superseded by **`FormatRowColumns(fc, columnNames, values)`**.
-
-**Notes**
-
-- Loading **JSON values** into cells often works with existing **`JSONFormatConfig` + `FormatToplevelColumn`** (this repo’s `--format csv` uses that pattern).
-- **CSV-specific policies** (unquoted numbers, empty NULL cells, etc.) should be nailed down before splitting APIs; the generic helper above is enough to start.
-
-### 3. Documentation (recommended patterns)
-
-**Goal:** A short page with **JSONL / CSV recipes** (`JSONFormatConfig` + `encoding/csv`) for readers using go-sql-spanner + proto decode + GCV would reduce perceived “missing” APIs.
-
-### 4. Clarify non-goals (reverse direction)
-
-**String → `GenericColumnValue`** cannot live in display `FormatConfig` / `FormatComplexPlugins` alone (**parsing + type information** required).
-
-- **Construction** belongs in **gcvctor** (below).
-- **Round-tripping CSV/JSON** is a separate layer (dedicated parser or app code).
+- **String → `GenericColumnValue`** parsing does not belong in display `FormatConfig`; use **gcvctor** (or app-specific parsers) for construction.
+- **`*spanner.Row` / `RowIterator` helpers** in spanvalue are fine for native client code; **go-sql-spanner consumers stay on GCV slices** (see non-goal above).
 
 ---
 
-## Requests for gcvctor
+## gcvctor (unchanged)
 
-### 1. Role
-
-- **`spanvalue`**: GCV → display strings (and row-level JSON assembly above).
-- **`gcvctor`** (or equivalent): **build GCVs** to expected types (fixtures, binding, parts of ETL).
-
-### 2. Nature of the ask
-
-From this repo we expect **clear module boundaries**: **GCV construction in gcvctor**, **spanvalue focused on formatting and symmetric row JSON APIs**. Concrete APIs follow gcvctor’s design.
+- **`spanvalue`:** GCV → display strings and export writers.
+- **`gcvctor`:** build GCVs for fixtures, binding, ETL. spannersh does not re-export construction APIs.
 
 ---
 
-## Reference (usage in this repo)
+## Reference (current spannersh usage)
 
-- Table output: `SpannerCLICompatibleFormatConfig` + `FormatToplevelColumn`
-- `--format csv` / `jsonl`: `JSONFormatConfig` + `FormatToplevelColumn`; column names via `columnNameForField` (empty names aligned with `spanvalue.IndexedUnnamedFieldNamer`)
+| Output | Mechanism |
+|--------|-----------|
+| GoogleSQL **table** | `ColumnNames` + `FormatRowColumns` + `SpannerCLICompatibleFormatConfig` (tuple STRUCT); types via **spantype** |
+| PostgreSQL **table** | **spanpg** header types + `FormatColumnSimple` (not spanvalue cells) |
+| **csv** / **jsonl** | `writer` + `JSONFormatConfig` + `WriteGCVs` + `finishWriterFlush` |
+
+Row iteration: `forEachResultRow` → `scanValues` → callback (no spanvalue `sql.Rows` API).
 
 ---
 
 ## Revision history
 
 - 2026-03-28: Initial version (conversation notes)
+- 2026-05-27: Mark #13 / v0.4 writer adoption; add post-adoption feedback; document no `sql.Rows` in spanvalue

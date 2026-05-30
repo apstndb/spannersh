@@ -101,7 +101,17 @@ func forEachResultRow(metadata *sppb.ResultSetMetadata, result *sql.Rows, fn fun
 	return n, result.Err()
 }
 
+func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
+	return spanvalue.ColumnNames(fields, spanvalue.IndexedUnnamedFieldNamer)
+}
+
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
+	fields := metadata.GetRowType().GetFields()
+	columnNames, err := columnNamesFromFields(fields)
+	if err != nil {
+		return "", 0, err
+	}
+
 	var sb strings.Builder
 	table := tablewriter.NewTable(&sb,
 		tablewriter.WithRendition(
@@ -112,10 +122,14 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 		tablewriter.WithHeaderAlignment(tw.AlignLeft),
 		tablewriter.WithFooterAutoWrap(tw.WrapNone))
 
-	table.Header(renderHeader(metadata.GetRowType().GetFields(), dialect))
+	header, err := renderHeader(fields, columnNames, dialect)
+	if err != nil {
+		return "", 0, err
+	}
+	table.Header(header)
 
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
-		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, values)
+		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, columnNames, values)
 		if err != nil {
 			return err
 		}
@@ -130,12 +144,15 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 	return sb.String(), n, nil
 }
 
-func renderHeader(fields []*sppb.StructType_Field, dialect databasepb.DatabaseDialect) []string {
-	header := make([]string, 0, len(fields))
-	for _, f := range fields {
-		header = append(header, f.GetName()+"\n"+formatTypeForHeader(f.GetType(), dialect))
+func renderHeader(fields []*sppb.StructType_Field, columnNames []string, dialect databasepb.DatabaseDialect) ([]string, error) {
+	if len(columnNames) != len(fields) {
+		return nil, fmt.Errorf("renderHeader: len(columnNames)=%d != len(fields)=%d", len(columnNames), len(fields))
 	}
-	return header
+	header := make([]string, 0, len(fields))
+	for i, f := range fields {
+		header = append(header, columnNames[i]+"\n"+formatTypeForHeader(f.GetType(), dialect))
+	}
+	return header, nil
 }
 
 // formatTypeForHeader uses PostgreSQL spellings when --dialect postgresql matches [spanpg.FormatPostgreSQLType].
@@ -147,8 +164,8 @@ func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) str
 }
 
 // renderTableCells uses [spanpg.FormatColumnSimple] for PostgreSQL dialect (human-readable PG-oriented scalars);
-// GoogleSQL uses the Cloud Spanner CLI-compatible formatter, but renders STRUCT with tuple-style parentheses.
-func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, values []spanner.GenericColumnValue) ([]string, error) {
+// GoogleSQL uses [spanvalue.FormatRowColumns] with the Cloud Spanner CLI-compatible formatter (STRUCT as tuple parentheses).
+func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, columnNames []string, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		ss := make([]string, 0, len(values))
 		for _, v := range values {
@@ -160,7 +177,7 @@ func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatCo
 		}
 		return ss, nil
 	}
-	return renderColumns(fc, values)
+	return spanvalue.FormatRowColumns(fc, columnNames, values)
 }
 
 func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.GenericColumnValue, error) {
@@ -177,46 +194,43 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 	return values, nil
 }
 
-func renderColumns(fc *spanvalue.FormatConfig, values []spanner.GenericColumnValue) ([]string, error) {
-	ss := make([]string, 0, len(values))
-	for _, v := range values {
-		s, err := fc.FormatToplevelColumn(v)
-		if err != nil {
-			return nil, err
-		}
-		ss = append(ss, s)
+func spanvalueDelimitedWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.DelimitedOption {
+	return []spanwriter.DelimitedOption{
+		spanwriter.WithMetadata(metadata),
+		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
+		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
 	}
-	return ss, nil
+}
+
+func spanvalueJSONLWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.JSONLOption {
+	return []spanwriter.JSONLOption{
+		spanwriter.WithMetadata(metadata),
+		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
+		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
+	}
 }
 
 // renderResultSetCSV writes one header row and data rows. Cell text uses [spanvalue.JSONFormatConfig]
 // through [spanwriter.DelimitedWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
+// The first [DelimitedWriter.WriteGCVs] emits the header; [DelimitedWriter.Flush] writes a header-only file for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewCSVWriter(out,
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-	)
-	if err := w.WriteHeader(); err != nil {
-		return 0, err
-	}
+	w := spanwriter.NewCSVWriter(out, spanvalueDelimitedWriterOptions(metadata)...)
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
-	return n, finishCSVWrite(w.Flush, err)
+	return n, finishWriterFlush(w.Flush, err)
 }
 
 // renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter].
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewJSONLWriter(out,
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-	)
-	return forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
+	w := spanwriter.NewJSONLWriter(out, spanvalueJSONLWriterOptions(metadata)...)
+	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
+	return n, finishWriterFlush(w.Flush, err)
 }
 
-func finishCSVWrite(flush func() error, rowErr error) error {
+func finishWriterFlush(flush func() error, rowErr error) error {
 	if flushErr := flush(); flushErr != nil {
 		if rowErr != nil {
 			return errors.Join(rowErr, flushErr)

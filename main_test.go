@@ -278,8 +278,15 @@ func TestRenderHeader(t *testing.T) {
 	fields := []*sppb.StructType_Field{
 		{Name: "k", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
 	}
+	names, err := columnNamesFromFields(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Run("GoogleSQL", func(t *testing.T) {
-		h := renderHeader(fields, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+		h, err := renderHeader(fields, names, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(h) != 1 {
 			t.Fatalf("len = %d", len(h))
 		}
@@ -292,7 +299,10 @@ func TestRenderHeader(t *testing.T) {
 		}
 	})
 	t.Run("PostgreSQL", func(t *testing.T) {
-		h := renderHeader(fields, databasepb.DatabaseDialect_POSTGRESQL)
+		h, err := renderHeader(fields, names, databasepb.DatabaseDialect_POSTGRESQL)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(h) != 1 {
 			t.Fatalf("len = %d", len(h))
 		}
@@ -300,6 +310,20 @@ func TestRenderHeader(t *testing.T) {
 			t.Fatalf("got %q, want k + newline + bigint", h[0])
 		}
 	})
+}
+
+func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
+	fields := []*sppb.StructType_Field{
+		{Name: "", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
+		{Name: "named", Type: &sppb.Type{Code: sppb.TypeCode_STRING}},
+	}
+	names, err := columnNamesFromFields(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if names[0] != "_0" || names[1] != "named" {
+		t.Fatalf("names = %v, want [_0 named]", names)
+	}
 }
 
 func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
@@ -324,19 +348,19 @@ func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
 	}
 }
 
-func TestFinishCSVWriteReportsFlushError(t *testing.T) {
+func TestFinishWriterFlushReportsFlushError(t *testing.T) {
 	flushErr := errors.New("flush failed")
-	if err := finishCSVWrite(func() error { return flushErr }, nil); !errors.Is(err, flushErr) {
-		t.Fatalf("finishCSVWrite error = %v, want flush error", err)
+	if err := finishWriterFlush(func() error { return flushErr }, nil); !errors.Is(err, flushErr) {
+		t.Fatalf("finishWriterFlush error = %v, want flush error", err)
 	}
 }
 
-func TestFinishCSVWriteJoinsRowAndFlushErrors(t *testing.T) {
+func TestFinishWriterFlushJoinsRowAndFlushErrors(t *testing.T) {
 	rowErr := errors.New("row failed")
 	flushErr := errors.New("flush failed")
-	err := finishCSVWrite(func() error { return flushErr }, rowErr)
+	err := finishWriterFlush(func() error { return flushErr }, rowErr)
 	if !errors.Is(err, rowErr) || !errors.Is(err, flushErr) {
-		t.Fatalf("finishCSVWrite error = %v, want joined row and flush errors", err)
+		t.Fatalf("finishWriterFlush error = %v, want joined row and flush errors", err)
 	}
 }
 
