@@ -21,7 +21,7 @@ import (
 )
 
 var spannerCLITableFormatConfig = func() *spanvalue.FormatConfig {
-	fc := spanvalue.SpannerCLICompatibleFormatConfig()
+	fc := spanvalue.SpannerCLICompatibleFormatConfig().Clone()
 	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
 	return fc
 }()
@@ -190,10 +190,12 @@ func renderColumns(fc *spanvalue.FormatConfig, values []spanner.GenericColumnVal
 }
 
 // renderResultSetCSV writes one header row and data rows. Cell text uses [spanvalue.JSONFormatConfig]
-// through [spanwriter.CSVWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
+// through [spanwriter.DelimitedWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewCSVWriter(out, metadata)
-	w.Formatter = spanvalue.JSONFormatConfig()
+	w := spanwriter.NewDelimitedWriterWithOptions(out, spanwriter.Comma,
+		spanwriter.WithMetadata(metadata),
+		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
+	)
 	if err := w.WriteHeader(); err != nil {
 		return 0, err
 	}
@@ -205,7 +207,10 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 
 // renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter].
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewJSONLWriter(out, metadata)
+	w := spanwriter.NewJSONLWriterWithOptions(out,
+		spanwriter.WithMetadata(metadata),
+		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
+	)
 	return forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
