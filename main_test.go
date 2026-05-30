@@ -69,11 +69,14 @@ func TestOutputFormatFromString(t *testing.T) {
 	}{
 		{"table", outputFormatTable},
 		{"TABLE", outputFormatTable},
+		{"Table", outputFormatTable},
 		{" Table ", outputFormatTable},
 		{"csv", outputFormatCSV},
 		{"CSV", outputFormatCSV},
+		{"Csv", outputFormatCSV},
 		{"jsonl", outputFormatJSONL},
 		{"JSONL", outputFormatJSONL},
+		{"Jsonl", outputFormatJSONL},
 		{"unknown", outputFormatTable},
 		{"", outputFormatTable},
 	}

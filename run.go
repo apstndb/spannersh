@@ -199,16 +199,20 @@ func openSpannerDB(opts cliOpts, dsnDialect databasepb.DatabaseDialect) (*sql.DB
 }
 
 func resolveEffectiveDialect(ctx context.Context, errOut io.Writer, db *sql.DB, dialect databasepb.DatabaseDialect, autoDetect bool) databasepb.DatabaseDialect {
-	if !autoDetect {
-		startBackgroundWarmup(ctx, errOut, db)
-		return dialect
+	var resolved databasepb.DatabaseDialect
+	if autoDetect {
+		d, err := detectDatabaseDialect(ctx, db)
+		if err != nil {
+			fmt.Fprintf(errOut, "could not read SQL dialect from driver: %v (using google-standard-sql for client-side parsing)\n", err)
+			resolved = databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL
+		} else {
+			resolved = d
+		}
+	} else {
+		resolved = dialect
 	}
-	d, err := detectDatabaseDialect(ctx, db)
-	if err != nil {
-		fmt.Fprintf(errOut, "could not read SQL dialect from driver: %v (using google-standard-sql for client-side parsing)\n", err)
-		return databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL
-	}
-	return d
+	startBackgroundWarmup(ctx, errOut, db)
+	return resolved
 }
 
 // replHandleReadErr maps readline errors to REPL control flow. stop means leave the read loop;

@@ -91,6 +91,11 @@ func TestIntegrationMultiStatementDisplay(t *testing.T) {
 	}
 }
 
+func TestIntegrationExplainPlanSelect1(t *testing.T) {
+	// PLAN mode; emulator may omit plan nodes and produce no visible output — must complete without error.
+	_ = integrationExecOutput(t, "EXPLAIN SELECT 1;")
+}
+
 func TestIntegrationExplainAnalyzeSelect1(t *testing.T) {
 	if out := integrationExecOutput(t, "EXPLAIN ANALYZE SELECT 1;"); !strings.Contains(out, "1 row in set") {
 		t.Fatalf("expected row summary in output:\n%s", out)

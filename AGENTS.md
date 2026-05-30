@@ -36,7 +36,7 @@ All material **saved in this repository**—source code, comments, tests, Markdo
 
 ## go-sql-spanner / driver
 
-- Interactive path: request **`DecodeOptionProto`, metadata, stats** via `ExecOptions`. Warm-up / **`--dialect auto`**: read **`database_dialect`** from the driver via client-side **`SHOW`** (see `queryDriverDatabaseDialect`), without `ExecOptions`. The connector already ran **`INFORMATION_SCHEMA`** once during connect; the shell does not duplicate that query. **`--dialect auto`**: only synchronous **`detectDatabaseDialect`** (no duplicate background warm-up). **Explicit dialect**: background warm-up only.
+- Interactive path: request **`DecodeOptionProto`, metadata, stats** via `ExecOptions`. **`--dialect auto`**: synchronous **`detectDatabaseDialect`** (client-side **`SHOW`**, no `ExecOptions`). After dialect is resolved (auto or explicit), **`startBackgroundWarmup`** runs **`SELECT 1`** in a goroutine with the root context: non-blocking for the prompt, logs **`warmup: …`** to stderr on failure, and stays quiet when the context is canceled.
 - **`multiline.Editor`** contains a mutex — **do not copy by value** (`go vet` copylocks). Configure on `*multiline.Editor`.
 - **REPL submit** (`replInputComplete`) — join and trim the **whole buffer**, not a single line; submit on Enter when the buffer **ends with `;`** or is **only `exit` / `quit`**. Multiple statements follow [go-sql-spanner v1.22.0](https://github.com/googleapis/go-sql-spanner/releases/tag/v1.22.0) **multi-sql / `NextResultSet`**.
 

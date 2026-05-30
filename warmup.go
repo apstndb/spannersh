@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// startBackgroundWarmup reads database_dialect via the driver (same path as [detectDatabaseDialect])
-// once without blocking the REPL. When --dialect auto, run.go skips this and relies on synchronous
-// [detectDatabaseDialect] only (one round trip for dialect + warm-up).
-// Failures are logged to errOut unless ctx is already canceled.
+// startBackgroundWarmup runs a lightweight SELECT 1 once without blocking the REPL so the first
+// interactive query is less likely to pay full cold-start cost. Uses default query mode (no PROFILE
+// ExecOptions). On failure, logs one line to errOut; on ctx cancel, logs nothing.
 func startBackgroundWarmup(ctx context.Context, errOut io.Writer, db *sql.DB) {
 	go func() {
 		if err := runWarmupQuery(ctx, db); err != nil {
@@ -26,6 +25,12 @@ func startBackgroundWarmup(ctx context.Context, errOut io.Writer, db *sql.DB) {
 func runWarmupQuery(ctx context.Context, db *sql.DB) error {
 	wctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	_, err := queryDriverDatabaseDialect(wctx, db)
-	return err
+	rows, err := db.QueryContext(wctx, "SELECT 1")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+	}
+	return rows.Err()
 }

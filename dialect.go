@@ -83,8 +83,7 @@ func queryDriverDatabaseDialectValue(ctx context.Context, db *sql.DB, sqlText st
 }
 
 // detectDatabaseDialect sets spannersh’s client-side StatementParser dialect from the driver’s
-// database_dialect property. With --dialect auto, this also serves as synchronous connection warm-up
-// (see warmup.go). Use an explicit --dialect if this fails.
+// database_dialect property. Use an explicit --dialect if this fails.
 func detectDatabaseDialect(ctx context.Context, db *sql.DB) (databasepb.DatabaseDialect, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
