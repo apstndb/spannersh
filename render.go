@@ -194,27 +194,18 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 	return values, nil
 }
 
-func spanvalueDelimitedWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.DelimitedOption {
-	return []spanwriter.DelimitedOption{
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
-	}
-}
-
-func spanvalueJSONLWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.JSONLOption {
-	return []spanwriter.JSONLOption{
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
-	}
-}
-
 // renderResultSetCSV writes one header row and data rows. Cell text uses [spanvalue.JSONFormatConfig]
 // through [spanwriter.DelimitedWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
 // The first [DelimitedWriter.WriteGCVs] emits the header; [DelimitedWriter.Flush] writes a header-only file for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewCSVWriter(out, spanvalueDelimitedWriterOptions(metadata)...)
+	w, err := spanwriter.NewCSVWriter(out, spanwriter.DelimitedGCVExportOptions(
+		metadata,
+		spanvalue.JSONFormatConfig(),
+		spanvalue.IndexedUnnamedFieldNamer,
+	)...)
+	if err != nil {
+		return 0, err
+	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
@@ -223,7 +214,14 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 
 // renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter].
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewJSONLWriter(out, spanvalueJSONLWriterOptions(metadata)...)
+	w, err := spanwriter.NewJSONLWriter(out, spanwriter.JSONLGCVExportOptions(
+		metadata,
+		spanvalue.JSONFormatConfig(),
+		spanvalue.IndexedUnnamedFieldNamer,
+	)...)
+	if err != nil {
+		return 0, err
+	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
