@@ -327,7 +327,7 @@ func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
 }
 
 func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
-	fc := spannerCLITableFormatConfig
+	fc := spannerCLIReadableFormatConfig
 	structValue := testStructGenericColumnValue()
 	arrayValue := testArrayOfStructGenericColumnValue()
 

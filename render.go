@@ -20,7 +20,9 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 )
 
-var spannerCLITableFormatConfig = func() *spanvalue.FormatConfig {
+// spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
+// parentheses (not bracket style). Shared by GoogleSQL table cells and CSV export.
+var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
 	fc := spanvalue.SpannerCLICompatibleFormatConfig().Clone()
 	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
 	return fc
@@ -129,7 +131,7 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 	table.Header(header)
 
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
-		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, columnNames, values)
+		ss, err := renderTableCells(dialect, spannerCLIReadableFormatConfig, columnNames, values)
 		if err != nil {
 			return err
 		}
@@ -194,13 +196,14 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 	return values, nil
 }
 
-// renderResultSetCSV writes one header row and data rows. Cell text uses [spanvalue.JSONFormatConfig]
-// through [spanwriter.DelimitedWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
-// The first [DelimitedWriter.WriteGCVs] emits the header; [DelimitedWriter.Flush] writes a header-only file for zero-row results.
+// renderResultSetCSV writes one header row and data rows. Cell text matches GoogleSQL table cells
+// ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. JSONL keeps
+// [spanvalue.JSONFormatConfig] for round-trip. The first WriteGCVs emits the header; Flush writes
+// header-only output for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
 	w, err := spanwriter.NewCSVWriter(out, spanwriter.DelimitedGCVExportOptions(
 		metadata,
-		spanvalue.JSONFormatConfig(),
+		spannerCLIReadableFormatConfig,
 		spanvalue.IndexedUnnamedFieldNamer,
 	)...)
 	if err != nil {
