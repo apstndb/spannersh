@@ -108,6 +108,9 @@ func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
 }
 
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
+	if metadata == nil {
+		return "", 0, errors.New("metadata is nil")
+	}
 	fields := metadata.GetRowType().GetFields()
 	columnNames, err := columnNamesFromFields(fields)
 	if err != nil {
@@ -197,10 +200,12 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 }
 
 // renderResultSetCSV writes one header row and data rows. Cell text matches GoogleSQL table cells
-// ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. JSONL keeps
-// [spanvalue.JSONFormatConfig] for round-trip. The first WriteGCVs emits the header; Flush writes
-// header-only output for zero-row results.
+// ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. The first WriteGCVs
+// emits the header; Flush writes header-only output for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
+	if metadata == nil {
+		return 0, errors.New("metadata is nil")
+	}
 	w, err := spanwriter.NewCSVWriter(out, spanwriter.DelimitedGCVExportOptions(
 		metadata,
 		spannerCLIReadableFormatConfig,
@@ -215,8 +220,13 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 	return n, finishWriterFlush(w.Flush, err)
 }
 
-// renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter].
+// renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter]. Cell values use
+// [spanvalue.JSONFormatConfig] for machine-oriented round-trip (contrast with CSV/table CLI text).
+// [spanwriter.JSONLWriter.Flush] is a no-op; finishWriterFlush keeps error-handling symmetry with CSV.
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
+	if metadata == nil {
+		return 0, errors.New("metadata is nil")
+	}
 	w, err := spanwriter.NewJSONLWriter(out, spanwriter.JSONLGCVExportOptions(
 		metadata,
 		spanvalue.JSONFormatConfig(),
