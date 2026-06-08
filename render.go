@@ -86,9 +86,22 @@ func renderQueryPlan(out io.Writer, rows *sql.Rows, drainedRowCount int, kind st
 	return nil
 }
 
+func metadataRowTypeFields(metadata *sppb.ResultSetMetadata) ([]*sppb.StructType_Field, error) {
+	if metadata == nil {
+		return nil, errors.New("metadata is nil")
+	}
+	if metadata.GetRowType() == nil {
+		return nil, errors.New("metadata row type is nil")
+	}
+	return metadata.GetRowType().GetFields(), nil
+}
+
 // forEachResultRow calls fn for each data row (after scan). Returns row count and result.Err().
 func forEachResultRow(metadata *sppb.ResultSetMetadata, result *sql.Rows, fn func([]spanner.GenericColumnValue) error) (int, error) {
-	fields := metadata.GetRowType().GetFields()
+	fields, err := metadataRowTypeFields(metadata)
+	if err != nil {
+		return 0, err
+	}
 	n := 0
 	for result.Next() {
 		n++
@@ -108,10 +121,10 @@ func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
 }
 
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
-	if metadata == nil {
-		return "", 0, errors.New("metadata is nil")
+	fields, err := metadataRowTypeFields(metadata)
+	if err != nil {
+		return "", 0, err
 	}
-	fields := metadata.GetRowType().GetFields()
 	columnNames, err := columnNamesFromFields(fields)
 	if err != nil {
 		return "", 0, err
@@ -203,8 +216,8 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 // ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. The first WriteGCVs
 // emits the header; Flush writes header-only output for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	if metadata == nil {
-		return 0, errors.New("metadata is nil")
+	if _, err := metadataRowTypeFields(metadata); err != nil {
+		return 0, err
 	}
 	w, err := spanwriter.NewCSVWriter(out, spanwriter.DelimitedGCVExportOptions(
 		metadata,
@@ -224,8 +237,8 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 // [spanvalue.JSONFormatConfig] for machine-oriented round-trip (contrast with CSV/table CLI text).
 // [spanwriter.JSONLWriter.Flush] is a no-op; finishWriterFlush keeps error-handling symmetry with CSV.
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	if metadata == nil {
-		return 0, errors.New("metadata is nil")
+	if _, err := metadataRowTypeFields(metadata); err != nil {
+		return 0, err
 	}
 	w, err := spanwriter.NewJSONLWriter(out, spanwriter.JSONLGCVExportOptions(
 		metadata,
