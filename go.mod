@@ -1,6 +1,6 @@
 module github.com/apstndb/spannersh
 
-go 1.26.2
+go 1.26.4
 
 require (
 	cloud.google.com/go/spanner v1.91.0
@@ -9,7 +9,7 @@ require (
 	github.com/apstndb/spannerplan v0.1.6
 	github.com/apstndb/spanpg v0.1.1
 	github.com/apstndb/spantype v0.3.11
-	github.com/apstndb/spanvalue v0.4.2
+	github.com/apstndb/spanvalue v0.5.0
 	github.com/googleapis/go-sql-spanner v1.25.1
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.0

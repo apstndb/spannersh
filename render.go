@@ -20,7 +20,9 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 )
 
-var spannerCLITableFormatConfig = func() *spanvalue.FormatConfig {
+// spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
+// parentheses (not bracket style). Shared by GoogleSQL table cells and CSV export.
+var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
 	fc := spanvalue.SpannerCLICompatibleFormatConfig().Clone()
 	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
 	return fc
@@ -84,9 +86,22 @@ func renderQueryPlan(out io.Writer, rows *sql.Rows, drainedRowCount int, kind st
 	return nil
 }
 
+func metadataRowTypeFields(metadata *sppb.ResultSetMetadata) ([]*sppb.StructType_Field, error) {
+	if metadata == nil {
+		return nil, errors.New("metadata is nil")
+	}
+	if metadata.GetRowType() == nil {
+		return nil, errors.New("metadata row type is nil")
+	}
+	return metadata.GetRowType().GetFields(), nil
+}
+
 // forEachResultRow calls fn for each data row (after scan). Returns row count and result.Err().
 func forEachResultRow(metadata *sppb.ResultSetMetadata, result *sql.Rows, fn func([]spanner.GenericColumnValue) error) (int, error) {
-	fields := metadata.GetRowType().GetFields()
+	fields, err := metadataRowTypeFields(metadata)
+	if err != nil {
+		return 0, err
+	}
 	n := 0
 	for result.Next() {
 		n++
@@ -105,12 +120,31 @@ func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
 	return spanvalue.ColumnNames(fields, spanvalue.IndexedUnnamedFieldNamer)
 }
 
+// columnNamesForRender returns names for table headers and FormatRowColumns. When
+// ColumnNames rejects duplicate aliases, fall back to raw field names (indexed
+// placeholders for unnamed columns) so valid result sets still render.
+func columnNamesForRender(fields []*sppb.StructType_Field) []string {
+	names, err := columnNamesFromFields(fields)
+	if err == nil {
+		return names
+	}
+	fallback := make([]string, len(fields))
+	for i, f := range fields {
+		name := f.GetName()
+		if name == "" {
+			name = fmt.Sprintf("_%d", i)
+		}
+		fallback[i] = name
+	}
+	return fallback
+}
+
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
-	fields := metadata.GetRowType().GetFields()
-	columnNames, err := columnNamesFromFields(fields)
+	fields, err := metadataRowTypeFields(metadata)
 	if err != nil {
 		return "", 0, err
 	}
+	columnNames := columnNamesForRender(fields)
 
 	var sb strings.Builder
 	table := tablewriter.NewTable(&sb,
@@ -129,7 +163,7 @@ func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, di
 	table.Header(header)
 
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
-		ss, err := renderTableCells(dialect, spannerCLITableFormatConfig, columnNames, values)
+		ss, err := renderTableCells(dialect, spannerCLIReadableFormatConfig, columnNames, values)
 		if err != nil {
 			return err
 		}
@@ -194,36 +228,42 @@ func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.Ge
 	return values, nil
 }
 
-func spanvalueDelimitedWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.DelimitedOption {
-	return []spanwriter.DelimitedOption{
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
-	}
-}
-
-func spanvalueJSONLWriterOptions(metadata *sppb.ResultSetMetadata) []spanwriter.JSONLOption {
-	return []spanwriter.JSONLOption{
-		spanwriter.WithMetadata(metadata),
-		spanwriter.WithFormatter(spanvalue.JSONFormatConfig()),
-		spanwriter.WithUnnamedFieldNamer(spanvalue.IndexedUnnamedFieldNamer),
-	}
-}
-
-// renderResultSetCSV writes one header row and data rows. Cell text uses [spanvalue.JSONFormatConfig]
-// through [spanwriter.DelimitedWriter] so ARRAY/STRUCT are unambiguous; encoding/csv quotes fields as needed.
-// The first [DelimitedWriter.WriteGCVs] emits the header; [DelimitedWriter.Flush] writes a header-only file for zero-row results.
+// renderResultSetCSV writes one header row and data rows. Cell text matches GoogleSQL table cells
+// ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. The first WriteGCVs
+// emits the header; Flush writes header-only output for zero-row results.
 func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewCSVWriter(out, spanvalueDelimitedWriterOptions(metadata)...)
+	if _, err := metadataRowTypeFields(metadata); err != nil {
+		return 0, err
+	}
+	w, err := spanwriter.NewCSVWriter(out, spanwriter.DelimitedGCVExportOptions(
+		metadata,
+		spannerCLIReadableFormatConfig,
+		spanvalue.IndexedUnnamedFieldNamer,
+	)...)
+	if err != nil {
+		return 0, err
+	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})
 	return n, finishWriterFlush(w.Flush, err)
 }
 
-// renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter].
+// renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter]. Cell values use
+// [spanvalue.JSONFormatConfig] for machine-oriented round-trip (contrast with CSV/table CLI text).
+// [spanwriter.JSONLWriter.Flush] is a no-op; finishWriterFlush keeps error-handling symmetry with CSV.
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	w := spanwriter.NewJSONLWriter(out, spanvalueJSONLWriterOptions(metadata)...)
+	if _, err := metadataRowTypeFields(metadata); err != nil {
+		return 0, err
+	}
+	w, err := spanwriter.NewJSONLWriter(out, spanwriter.JSONLGCVExportOptions(
+		metadata,
+		spanvalue.JSONFormatConfig(),
+		spanvalue.IndexedUnnamedFieldNamer,
+	)...)
+	if err != nil {
+		return 0, err
+	}
 	n, err := forEachResultRow(metadata, result, func(values []spanner.GenericColumnValue) error {
 		return w.WriteGCVs(values)
 	})

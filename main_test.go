@@ -312,6 +312,24 @@ func TestRenderHeader(t *testing.T) {
 	})
 }
 
+func TestColumnNamesForRenderDuplicateExplicitAliases(t *testing.T) {
+	fields := []*sppb.StructType_Field{
+		{Name: "a", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
+		{Name: "a", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
+	}
+	got := columnNamesForRender(fields)
+	if got[0] != "a" || got[1] != "a" {
+		t.Fatalf("columnNamesForRender = %v, want [a a]", got)
+	}
+	h, err := renderHeader(fields, got, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h) != 2 || !strings.HasPrefix(h[0], "a\n") || !strings.HasPrefix(h[1], "a\n") {
+		t.Fatalf("renderHeader = %v", h)
+	}
+}
+
 func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
 	fields := []*sppb.StructType_Field{
 		{Name: "", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
@@ -327,7 +345,7 @@ func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
 }
 
 func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
-	fc := spannerCLITableFormatConfig
+	fc := spannerCLIReadableFormatConfig
 	structValue := testStructGenericColumnValue()
 	arrayValue := testArrayOfStructGenericColumnValue()
 
