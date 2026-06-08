@@ -120,15 +120,31 @@ func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
 	return spanvalue.ColumnNames(fields, spanvalue.IndexedUnnamedFieldNamer)
 }
 
+// columnNamesForRender returns names for table headers and FormatRowColumns. When
+// ColumnNames rejects duplicate aliases, fall back to raw field names (indexed
+// placeholders for unnamed columns) so valid result sets still render.
+func columnNamesForRender(fields []*sppb.StructType_Field) []string {
+	names, err := columnNamesFromFields(fields)
+	if err == nil {
+		return names
+	}
+	fallback := make([]string, len(fields))
+	for i, f := range fields {
+		name := f.GetName()
+		if name == "" {
+			name = fmt.Sprintf("_%d", i)
+		}
+		fallback[i] = name
+	}
+	return fallback
+}
+
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
 	fields, err := metadataRowTypeFields(metadata)
 	if err != nil {
 		return "", 0, err
 	}
-	columnNames, err := columnNamesFromFields(fields)
-	if err != nil {
-		return "", 0, err
-	}
+	columnNames := columnNamesForRender(fields)
 
 	var sb strings.Builder
 	table := tablewriter.NewTable(&sb,
