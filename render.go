@@ -25,6 +25,9 @@ import (
 var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
 	fc := spanvalue.SpannerCLICompatibleFormatConfig().Clone()
 	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
+	if err := fc.Validate(); err != nil {
+		panic("spannerCLIReadableFormatConfig: " + err.Error())
+	}
 	return fc
 }()
 

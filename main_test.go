@@ -16,10 +16,11 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
 	"github.com/apstndb/spantype"
+	"github.com/apstndb/spanvalue"
+	"github.com/apstndb/spanvalue/gcvctor"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
 	"github.com/hymkor/go-multiline-ny"
 	"github.com/nyaosorg/go-ttyadapter/tty10pe"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestParseCLIDialect(t *testing.T) {
@@ -344,6 +345,15 @@ func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
 	}
 }
 
+func TestSpannerCLIReadableFormatConfigValidates(t *testing.T) {
+	if err := spannerCLIReadableFormatConfig.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := spanvalue.JSONFormatConfig().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
 	fc := spannerCLIReadableFormatConfig
 	structValue := testStructGenericColumnValue()
@@ -522,33 +532,16 @@ func TestContextWithInterruptCancelsChildOnly(t *testing.T) {
 }
 
 func testStructGenericColumnValue() spanner.GenericColumnValue {
-	structType := &sppb.Type{
-		Code: sppb.TypeCode_STRUCT,
-		StructType: &sppb.StructType{
-			Fields: []*sppb.StructType_Field{
-				{Name: "n", Type: &sppb.Type{Code: sppb.TypeCode_INT64}},
-				{Name: "s", Type: &sppb.Type{Code: sppb.TypeCode_STRING}},
-			},
+	return gcvctor.MustStructValueOf(
+		[]string{"n", "s"},
+		[]spanner.GenericColumnValue{
+			gcvctor.Int64Value(1),
+			gcvctor.StringValue("foo"),
 		},
-	}
-	return spanner.GenericColumnValue{
-		Type: structType,
-		// Spanner encodes INT64 values as strings in protobuf Value.
-		Value: testListValue(structpb.NewStringValue("1"), structpb.NewStringValue("foo")),
-	}
+	)
 }
 
 func testArrayOfStructGenericColumnValue() spanner.GenericColumnValue {
 	structValue := testStructGenericColumnValue()
-	return spanner.GenericColumnValue{
-		Type: &sppb.Type{
-			Code:             sppb.TypeCode_ARRAY,
-			ArrayElementType: structValue.Type,
-		},
-		Value: testListValue(structValue.Value),
-	}
-}
-
-func testListValue(values ...*structpb.Value) *structpb.Value {
-	return structpb.NewListValue(&structpb.ListValue{Values: values})
+	return gcvctor.MustArrayValueOf(structValue.Type, structValue)
 }
