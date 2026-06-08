@@ -345,10 +345,10 @@ func TestColumnNamesFromFieldsIndexedUnnamed(t *testing.T) {
 	}
 }
 
-func TestSpannerCLIReadableFormatConfigValidates(t *testing.T) {
-	if err := spannerCLIReadableFormatConfig.Validate(); err != nil {
-		t.Fatal(err)
-	}
+// TestJSONFormatConfigValidates guards the jsonl export preset. spannerCLIReadableFormatConfig
+// is validated in render.go package init (panic on failure); JSONFormatConfig is built per call
+// in renderResultSetJSONL without a production-side Validate.
+func TestJSONFormatConfigValidates(t *testing.T) {
 	if err := spanvalue.JSONFormatConfig().Validate(); err != nil {
 		t.Fatal(err)
 	}
