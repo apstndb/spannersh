@@ -10,6 +10,7 @@ import (
 	"cloud.google.com/go/spanner"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
+	"github.com/apstndb/spanvalue/dbsqlrows"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
 )
 
@@ -133,27 +134,18 @@ func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sq
 		}
 		return writeExecutionSummaryAfterDataRows(out, rows, n, verbose)
 	default:
-		n, err := drainResultSet(rsm, rows)
+		result, err := dbsqlrows.RunRowsAtData(rows, rsm, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.SQLRowsConfig{ReadResultSetStats: true})
 		if err != nil {
 			return err
 		}
-		return renderQueryPlan(out, rows, n, kind, verbose)
+		return renderQueryPlanFromStats(out, result.Stats, result.RowsRead, kind, verbose)
 	}
 }
 
 // readMetadataAndAdvanceToData reads the metadata pseudo-row and advances to the data result set.
 // If there is no next row, returns ok=false and err=rows.Err() (nil on clean EOF).
 func readMetadataAndAdvanceToData(rows *sql.Rows) (rsm *sppb.ResultSetMetadata, ok bool, err error) {
-	if !rows.Next() {
-		return nil, false, rows.Err()
-	}
-	if err := rows.Scan(&rsm); err != nil {
-		return nil, false, err
-	}
-	if !rows.NextResultSet() {
-		return nil, false, fmt.Errorf("expected data rows result set after metadata")
-	}
-	return rsm, true, nil
+	return dbsqlrows.ReadMetadataAndAdvanceToData(rows)
 }
 
 // fetchResultSetStatsAfterDataRows advances to the stats result set after data rows and decodes [ResultSetStats].
@@ -180,7 +172,11 @@ func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCo
 }
 
 func drainResultSet(metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	return forEachResultRow(metadata, result, func([]spanner.GenericColumnValue) error { return nil })
+	exported, err := dbsqlrows.RunRowsAtData(result, metadata, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.SQLRowsConfig{})
+	if err != nil {
+		return exported.RowsRead, err
+	}
+	return exported.RowsRead, nil
 }
 
 func fetchSingleValueInResultSet[T any](rows *sql.Rows) (T, error) {

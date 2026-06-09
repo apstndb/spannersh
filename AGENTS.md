@@ -17,7 +17,7 @@ All material **saved in this repository**—source code, comments, tests, Markdo
 
 - **`app`** — holds `ctx`, `out`, `db`, `format`, `dialect`; drives `executeAndRender` and friends via `*app` methods.
 - **`preparedQuery`** — result of `prepareQuery` (SQL to run / `QueryMode` / display kind). Prefer this named struct over a bare triple.
-- **`queryHead`** — `*sql.Rows` and `ResultSetMetadata` after consuming the metadata result set.**Caller closes `rows`.** Document the **metadata → data rows → stats** order assumed by `buildExecOptions`. For multiple statements, **`displayResults` advances with `readMetadataAndAdvanceToData`** to the next metadata; repeat with a **blank line** between blocks.
+- **`queryHead`** — `*sql.Rows` and `ResultSetMetadata` after consuming the metadata result set.**Caller closes `rows`.** Document the **metadata → data rows → stats** order assumed by `buildExecOptions`. Metadata advance and row loops use **`github.com/apstndb/spanvalue/dbsqlrows`** (`ReadMetadataAndAdvanceToData`, `RunRowsAtData`, `WriteRowsAtData`; v0.7+ **`SQLRowsConfig`** / **`SQLRowsResult`**). For multiple statements, **`displayResults` advances with `readMetadataAndAdvanceToData`** to the next metadata; repeat with a **blank line** between blocks.
 
 ## Spanner / EXPLAIN display rules
 
