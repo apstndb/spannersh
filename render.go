@@ -13,9 +13,12 @@ import (
 	"github.com/apstndb/spannerplan/plantree/reference"
 	"github.com/apstndb/spanpg"
 	"github.com/apstndb/spantype"
-	"github.com/apstndb/spannersh/internal/dbsqlrows"
 	"github.com/apstndb/spanvalue"
+	"github.com/apstndb/spanvalue/dbsqlrows"
 	spanwriter "github.com/apstndb/spanvalue/writer"
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
 )
 
 // spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
@@ -54,7 +57,7 @@ func renderQueryResultData(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql
 }
 
 // renderQueryPlanFromStats prints EXPLAIN (PLAN) or EXPLAIN ANALYZE (PROFILE) from stats already
-// read by [dbsqlrows.DrainAtData]. PLAN does not populate QueryStats in general; we only show the
+// read via [dbsqlrows.RunRowsAtData] (empty hooks, ReadResultSetStats). PLAN does not populate QueryStats in general; we only show the
 // plan tree. PROFILE shows the plan first, then row count, then query_stats when the API returns it.
 func renderQueryPlanFromStats(out io.Writer, rss *sppb.ResultSetStats, drainedRowCount int, kind stmtDisplayKind, verbose bool) error {
 	if rss == nil {
@@ -94,26 +97,6 @@ func metadataRowTypeFields(metadata *sppb.ResultSetMetadata) ([]*sppb.StructType
 	return metadata.GetRowType().GetFields(), nil
 }
 
-// forEachResultRow calls fn for each data row (after scan). Returns row count and result.Err().
-func forEachResultRow(metadata *sppb.ResultSetMetadata, result *sql.Rows, fn func([]spanner.GenericColumnValue) error) (int, error) {
-	fields, err := metadataRowTypeFields(metadata)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for result.Next() {
-		n++
-		values, err := scanValues(fields, result)
-		if err != nil {
-			return n, err
-		}
-		if err := fn(values); err != nil {
-			return n, err
-		}
-	}
-	return n, result.Err()
-}
-
 func columnNamesFromFields(fields []*sppb.StructType_Field) ([]string, error) {
 	return spanvalue.ColumnNames(fields, spanvalue.IndexedUnnamedFieldNamer)
 }
@@ -138,24 +121,46 @@ func columnNamesForRender(fields []*sppb.StructType_Field) []string {
 }
 
 func renderResultSetTable(metadata *sppb.ResultSetMetadata, result *sql.Rows, dialect databasepb.DatabaseDialect) (string, int, error) {
-	if _, err := metadataRowTypeFields(metadata); err != nil {
-		return "", 0, err
-	}
 	var sb strings.Builder
-	tr := dbsqlrows.NewTableRenderer(&sb, dbsqlrows.TableRenderConfig{
-		ColumnNames: columnNamesForRender,
-		HeaderRow: func(fields []*sppb.StructType_Field, columnNames []string) ([]string, error) {
-			return renderHeader(fields, columnNames, dialect)
-		},
-		DataRow: func(columnNames []string, values []spanner.GenericColumnValue) ([]string, error) {
-			return renderTableCells(dialect, spannerCLIReadableFormatConfig, columnNames, values)
-		},
-	})
-	exported, err := dbsqlrows.RunAtData(result, metadata, dbsqlrows.SQLRowsHooksFromSink(tr), dbsqlrows.RunOptions{})
+	table := tablewriter.NewTable(&sb,
+		tablewriter.WithRendition(
+			renderer.NewBlueprint(tw.Rendition{Symbols: tw.NewSymbols(tw.StyleASCII)}).Config(),
+		),
+		tablewriter.WithTrimSpace(tw.Off),
+		tablewriter.WithHeaderAutoFormat(tw.Off),
+		tablewriter.WithHeaderAlignment(tw.AlignLeft),
+		tablewriter.WithFooterAutoWrap(tw.WrapNone))
+
+	var columnNames []string
+	exported, err := dbsqlrows.RunRowsAtData(result, metadata, dbsqlrows.NewSQLRowsHooks().
+		WithPrepareMetadata(func(md *sppb.ResultSetMetadata) error {
+			fields, err := metadataRowTypeFields(md)
+			if err != nil {
+				return err
+			}
+			columnNames = columnNamesForRender(fields)
+			header, err := renderHeader(fields, columnNames, dialect)
+			if err != nil {
+				return err
+			}
+			table.Header(header)
+			return nil
+		}).
+		WithWriteDataRow(func(values []spanner.GenericColumnValue) error {
+			ss, err := renderTableCells(dialect, spannerCLIReadableFormatConfig, columnNames, values)
+			if err != nil {
+				return err
+			}
+			return table.Append(ss)
+		}).
+		WithFinish(func(*dbsqlrows.ExportResult) error {
+			return table.Render()
+		}),
+		dbsqlrows.ExportConfig{})
 	if err != nil {
 		return "", exported.RowsRead, err
 	}
-	return tr.String(), exported.RowsRead, nil
+	return sb.String(), exported.RowsRead, nil
 }
 
 func renderHeader(fields []*sppb.StructType_Field, columnNames []string, dialect databasepb.DatabaseDialect) ([]string, error) {
@@ -194,20 +199,6 @@ func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatCo
 	return spanvalue.FormatRowColumns(fc, columnNames, values)
 }
 
-func scanValues(fields []*sppb.StructType_Field, result *sql.Rows) ([]spanner.GenericColumnValue, error) {
-	values := make([]spanner.GenericColumnValue, len(fields))
-
-	anys := make([]any, len(fields))
-	for i := range values {
-		anys[i] = &values[i]
-	}
-
-	if err := result.Scan(anys...); err != nil {
-		return nil, err
-	}
-	return values, nil
-}
-
 // renderResultSetCSV writes one header row and data rows. Cell text matches GoogleSQL table cells
 // ([spannerCLIReadableFormatConfig]); [encoding/csv] quotes fields when needed. The first WriteGCVs
 // emits the header; Flush writes header-only output for zero-row results.
@@ -223,7 +214,7 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 	if err != nil {
 		return 0, err
 	}
-	exported, err := dbsqlrows.WriteGCVStream(w, result, metadata, dbsqlrows.RunOptions{})
+	exported, err := dbsqlrows.ExportRowsAtData(result, metadata, w, dbsqlrows.ExportConfig{})
 	if err != nil {
 		return 0, err
 	}
@@ -232,7 +223,7 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 
 // renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter]. Cell values use
 // [spanvalue.JSONFormatConfig] for machine-oriented round-trip (contrast with CSV/table CLI text).
-// [spanwriter.JSONLWriter.Flush] is a no-op; [dbsqlrows.WriteGCVStream] still calls Flush via hooks for symmetry with CSV.
+// [dbsqlrows.ExportRowsAtData] calls [spanwriter.JSONLWriter.Flush] for symmetry with CSV.
 func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
 	if _, err := metadataRowTypeFields(metadata); err != nil {
 		return 0, err
@@ -245,7 +236,7 @@ func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, resul
 	if err != nil {
 		return 0, err
 	}
-	exported, err := dbsqlrows.WriteGCVStream(w, result, metadata, dbsqlrows.RunOptions{})
+	exported, err := dbsqlrows.ExportRowsAtData(result, metadata, w, dbsqlrows.ExportConfig{})
 	if err != nil {
 		return 0, err
 	}

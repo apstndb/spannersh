@@ -10,7 +10,7 @@ import (
 	"cloud.google.com/go/spanner"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
-	"github.com/apstndb/spannersh/internal/dbsqlrows"
+	"github.com/apstndb/spanvalue/dbsqlrows"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
 )
 
@@ -134,7 +134,7 @@ func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sq
 		}
 		return writeExecutionSummaryAfterDataRows(out, rows, n, verbose)
 	default:
-		result, err := dbsqlrows.DrainAtData(rows, rsm, true)
+		result, err := dbsqlrows.RunRowsAtData(rows, rsm, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.ExportConfig{ReadResultSetStats: true})
 		if err != nil {
 			return err
 		}
@@ -172,7 +172,11 @@ func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCo
 }
 
 func drainResultSet(metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	return forEachResultRow(metadata, result, func([]spanner.GenericColumnValue) error { return nil })
+	exported, err := dbsqlrows.RunRowsAtData(result, metadata, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.ExportConfig{})
+	if err != nil {
+		return exported.RowsRead, err
+	}
+	return exported.RowsRead, nil
 }
 
 func fetchSingleValueInResultSet[T any](rows *sql.Rows) (T, error) {
