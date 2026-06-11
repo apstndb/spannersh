@@ -182,10 +182,12 @@ func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCo
 
 func drainResultSet(metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
 	exported, err := dbsqlrows.RunRowsAtData(result, metadata, countingRowsHooks(), dbsqlrows.SQLRowsConfig{})
-	if err != nil {
-		return exported.RowsRead, err
+	if exported == nil {
+		// Argument-validation failures carry no partial result; guarding
+		// here avoids a nil dereference on those paths.
+		return 0, err
 	}
-	return exported.RowsRead, nil
+	return exported.RowsRead, err
 }
 
 func fetchSingleValueInResultSet[T any](rows *sql.Rows) (T, error) {

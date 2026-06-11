@@ -215,10 +215,13 @@ func renderResultSetCSV(out io.Writer, metadata *sppb.ResultSetMetadata, result 
 		return 0, err
 	}
 	exported, err := dbsqlrows.WriteRowsAtData(result, metadata, w, dbsqlrows.SQLRowsConfig{})
-	if err != nil {
+	if exported == nil {
+		// Argument-validation failures carry no partial result.
 		return 0, err
 	}
-	return exported.RowsRead, nil
+	// On abort, RowsRead reflects progress at the abort point (dbsqlrows
+	// partial-result contract); surface it alongside the error.
+	return exported.RowsRead, err
 }
 
 // renderResultSetJSONL writes one JSON object per row via [spanwriter.JSONLWriter]. Cell values use
@@ -237,10 +240,13 @@ func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, resul
 		return 0, err
 	}
 	exported, err := dbsqlrows.WriteRowsAtData(result, metadata, w, dbsqlrows.SQLRowsConfig{})
-	if err != nil {
+	if exported == nil {
+		// Argument-validation failures carry no partial result.
 		return 0, err
 	}
-	return exported.RowsRead, nil
+	// On abort, RowsRead reflects progress at the abort point (dbsqlrows
+	// partial-result contract); surface it alongside the error.
+	return exported.RowsRead, err
 }
 
 func finishWriterFlush(flush func() error, rowErr error) error {
