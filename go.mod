@@ -9,7 +9,7 @@ require (
 	github.com/apstndb/spannerplan v0.1.6
 	github.com/apstndb/spanpg v0.1.1
 	github.com/apstndb/spantype v0.3.11
-	github.com/apstndb/spanvalue v0.7.0
+	github.com/apstndb/spanvalue v0.7.5
 	github.com/googleapis/go-sql-spanner v1.25.1
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.0

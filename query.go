@@ -134,12 +134,21 @@ func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sq
 		}
 		return writeExecutionSummaryAfterDataRows(out, rows, n, verbose)
 	default:
-		result, err := dbsqlrows.RunRowsAtData(rows, rsm, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.SQLRowsConfig{ReadResultSetStats: true})
+		result, err := dbsqlrows.RunRowsAtData(rows, rsm, countingRowsHooks(), dbsqlrows.SQLRowsConfig{ReadResultSetStats: true})
 		if err != nil {
 			return err
 		}
 		return renderQueryPlanFromStats(out, result.Stats, result.RowsRead, kind, verbose)
 	}
+}
+
+// countingRowsHooks returns hooks whose no-op WriteDataRow makes
+// [dbsqlrows.SQLRowsResult.RowsRead] count data rows. Since spanvalue v0.7.5
+// (apstndb/spanvalue#242), a nil WriteDataRow drains rows without counting and
+// RowsRead stays zero, so hooks that only need the row count must still set
+// WriteDataRow.
+func countingRowsHooks() dbsqlrows.SQLRowsHooks {
+	return dbsqlrows.NewSQLRowsHooks().WithWriteDataRow(func([]spanner.GenericColumnValue) error { return nil })
 }
 
 // readMetadataAndAdvanceToData reads the metadata pseudo-row and advances to the data result set.
@@ -172,7 +181,7 @@ func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCo
 }
 
 func drainResultSet(metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	exported, err := dbsqlrows.RunRowsAtData(result, metadata, dbsqlrows.NewSQLRowsHooks(), dbsqlrows.SQLRowsConfig{})
+	exported, err := dbsqlrows.RunRowsAtData(result, metadata, countingRowsHooks(), dbsqlrows.SQLRowsConfig{})
 	if err != nil {
 		return exported.RowsRead, err
 	}

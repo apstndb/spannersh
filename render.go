@@ -57,7 +57,7 @@ func renderQueryResultData(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sql
 }
 
 // renderQueryPlanFromStats prints EXPLAIN (PLAN) or EXPLAIN ANALYZE (PROFILE) from stats already
-// read via [dbsqlrows.RunRowsAtData] (empty hooks, ReadResultSetStats). PLAN does not populate QueryStats in general; we only show the
+// read via [dbsqlrows.RunRowsAtData] (counting hooks, ReadResultSetStats). PLAN does not populate QueryStats in general; we only show the
 // plan tree. PROFILE shows the plan first, then row count, then query_stats when the API returns it.
 func renderQueryPlanFromStats(out io.Writer, rss *sppb.ResultSetStats, drainedRowCount int, kind stmtDisplayKind, verbose bool) error {
 	if rss == nil {
