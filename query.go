@@ -10,6 +10,7 @@ import (
 	"cloud.google.com/go/spanner"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
+	"github.com/apstndb/spanvalue/dbsqlrows"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
 )
 
@@ -133,27 +134,27 @@ func displayStatementResult(out io.Writer, rsm *sppb.ResultSetMetadata, rows *sq
 		}
 		return writeExecutionSummaryAfterDataRows(out, rows, n, verbose)
 	default:
-		n, err := drainResultSet(rsm, rows)
+		result, err := dbsqlrows.RunRowsAtData(rows, rsm, countingRowsHooks(), dbsqlrows.SQLRowsConfig{ReadResultSetStats: true})
 		if err != nil {
 			return err
 		}
-		return renderQueryPlan(out, rows, n, kind, verbose)
+		return renderQueryPlanFromStats(out, result.Stats, result.RowsRead, kind, verbose)
 	}
+}
+
+// countingRowsHooks returns hooks whose no-op WriteDataRow makes
+// [dbsqlrows.SQLRowsResult.RowsRead] count data rows. Since spanvalue v0.7.5
+// (apstndb/spanvalue#242), a nil WriteDataRow drains rows without counting and
+// RowsRead stays zero, so hooks that only need the row count must still set
+// WriteDataRow.
+func countingRowsHooks() dbsqlrows.SQLRowsHooks {
+	return dbsqlrows.NewSQLRowsHooks().WithWriteDataRow(func([]spanner.GenericColumnValue) error { return nil })
 }
 
 // readMetadataAndAdvanceToData reads the metadata pseudo-row and advances to the data result set.
 // If there is no next row, returns ok=false and err=rows.Err() (nil on clean EOF).
 func readMetadataAndAdvanceToData(rows *sql.Rows) (rsm *sppb.ResultSetMetadata, ok bool, err error) {
-	if !rows.Next() {
-		return nil, false, rows.Err()
-	}
-	if err := rows.Scan(&rsm); err != nil {
-		return nil, false, err
-	}
-	if !rows.NextResultSet() {
-		return nil, false, fmt.Errorf("expected data rows result set after metadata")
-	}
-	return rsm, true, nil
+	return dbsqlrows.ReadMetadataAndAdvanceToData(rows)
 }
 
 // fetchResultSetStatsAfterDataRows advances to the stats result set after data rows and decodes [ResultSetStats].
@@ -180,7 +181,13 @@ func writeExecutionSummaryAfterDataRows(out io.Writer, rows *sql.Rows, dataRowCo
 }
 
 func drainResultSet(metadata *sppb.ResultSetMetadata, result *sql.Rows) (int, error) {
-	return forEachResultRow(metadata, result, func([]spanner.GenericColumnValue) error { return nil })
+	exported, err := dbsqlrows.RunRowsAtData(result, metadata, countingRowsHooks(), dbsqlrows.SQLRowsConfig{})
+	if exported == nil {
+		// Argument-validation failures carry no partial result; guarding
+		// here avoids a nil dereference on those paths.
+		return 0, err
+	}
+	return exported.RowsRead, err
 }
 
 func fetchSingleValueInResultSet[T any](rows *sql.Rows) (T, error) {
