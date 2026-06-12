@@ -22,6 +22,10 @@ import (
 
 // spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
 // parentheses (not bracket style). Shared by GoogleSQL table cells and CSV export.
+// pgSimpleFormatConfig renders PostgreSQL-dialect table cells; hoisted to
+// package level because renderTableCells runs per row.
+var pgSimpleFormatConfig = spanvalue.SimpleFormatConfig()
+
 var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
 	fc := spanvalue.SpannerCLICompatibleFormatConfig().WithComplexPlugin(
 		spanvalue.PluginForStruct(spanvalue.FormatSimpleStructField, spanvalue.FormatTupleStruct))
@@ -188,10 +192,9 @@ func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) str
 // tuple parentheses).
 func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, columnNames []string, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
-		simple := spanvalue.SimpleFormatConfig()
 		ss := make([]string, 0, len(values))
 		for _, v := range values {
-			s, err := simple.FormatToplevelColumn(v)
+			s, err := pgSimpleFormatConfig.FormatToplevelColumn(v)
 			if err != nil {
 				return nil, err
 			}
