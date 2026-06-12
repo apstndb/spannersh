@@ -24,8 +24,8 @@ import (
 // spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
 // parentheses (not bracket style). Shared by GoogleSQL table cells and CSV export.
 var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
-	fc := spanvalue.SpannerCLICompatibleFormatConfig().Clone()
-	fc.FormatStruct.FormatStructParen = spanvalue.FormatTupleStruct
+	fc := spanvalue.SpannerCLICompatibleFormatConfig().WithComplexPlugin(
+		spanvalue.PluginForStruct(spanvalue.FormatSimpleStructField, spanvalue.FormatTupleStruct))
 	if err := fc.Validate(); err != nil {
 		panic("spannerCLIReadableFormatConfig: " + err.Error())
 	}
