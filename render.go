@@ -11,7 +11,6 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	sppb "cloud.google.com/go/spanner/apiv1/spannerpb"
 	"github.com/apstndb/spannerplan/plantree/reference"
-	"github.com/apstndb/spanpg"
 	"github.com/apstndb/spantype"
 	"github.com/apstndb/spanvalue"
 	"github.com/apstndb/spanvalue/dbsqlrows"
@@ -23,6 +22,10 @@ import (
 
 // spannerCLIReadableFormatConfig is Spanner CLI-compatible cell text with tuple STRUCT
 // parentheses (not bracket style). Shared by GoogleSQL table cells and CSV export.
+// pgSimpleFormatConfig renders PostgreSQL-dialect table cells; hoisted to
+// package level because renderTableCells runs per row.
+var pgSimpleFormatConfig = spanvalue.SimpleFormatConfig()
+
 var spannerCLIReadableFormatConfig = func() *spanvalue.FormatConfig {
 	fc := spanvalue.SpannerCLICompatibleFormatConfig().WithComplexPlugin(
 		spanvalue.PluginForStruct(spanvalue.FormatSimpleStructField, spanvalue.FormatTupleStruct))
@@ -174,21 +177,24 @@ func renderHeader(fields []*sppb.StructType_Field, columnNames []string, dialect
 	return header, nil
 }
 
-// formatTypeForHeader uses PostgreSQL spellings when --dialect postgresql matches [spanpg.FormatPostgreSQLType].
+// formatTypeForHeader uses PostgreSQL spellings when --dialect postgresql matches
+// [spantype.FormatTypePostgreSQL].
 func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) string {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
-		return spanpg.FormatPostgreSQLType(typ)
+		return spantype.FormatTypePostgreSQL(typ)
 	}
 	return spantype.FormatTypeNormal(typ)
 }
 
-// renderTableCells uses [spanpg.FormatColumnSimple] for PostgreSQL dialect (human-readable PG-oriented scalars);
-// GoogleSQL uses [spanvalue.FormatRowColumns] with the Cloud Spanner CLI-compatible formatter (STRUCT as tuple parentheses).
+// renderTableCells uses [spanvalue.SimpleFormatConfig] for PostgreSQL dialect (human-readable
+// scalars, matching the former spanpg.FormatColumnSimple bridge); GoogleSQL uses
+// [spanvalue.FormatRowColumns] with the Cloud Spanner CLI-compatible formatter (STRUCT as
+// tuple parentheses).
 func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, columnNames []string, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		ss := make([]string, 0, len(values))
 		for _, v := range values {
-			s, err := spanpg.FormatColumnSimple(v)
+			s, err := pgSimpleFormatConfig.FormatToplevelColumn(v)
 			if err != nil {
 				return nil, err
 			}
