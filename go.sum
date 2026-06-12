@@ -46,12 +46,10 @@ github.com/apstndb/spanemuboost v0.4.0 h1:PSr0bjmQlMn7iocJygIM4j8fTTDsvwsZdFsr9T
 github.com/apstndb/spanemuboost v0.4.0/go.mod h1:eNkNh4KbpREZ8vkjMerGbqDt8L05AHTw+Ek8XXHxyUI=
 github.com/apstndb/spannerplan v0.1.6 h1:pm1fcp2ciqxoXW+wOMuH7MENlIsJ50FSPhyTVrVtG6s=
 github.com/apstndb/spannerplan v0.1.6/go.mod h1:PMc14PeeNvrzidbisEuoVwpKmhZz1zy41fw8IzKQVbQ=
-github.com/apstndb/spanpg v0.1.1 h1:qMJ9tLWUDaJtN9tYQ0FOwKpug91T3CG3SkYgKD8Bzns=
-github.com/apstndb/spanpg v0.1.1/go.mod h1:7Bl1Jug+T6zwrXXH7i/Rnl9yzsxcb/T+bpzIEGKL7mk=
-github.com/apstndb/spantype v0.3.11 h1:wKue4WLYGT82MH3B3TRSFn8tWIbk1Geczs+5BAEtnK4=
-github.com/apstndb/spantype v0.3.11/go.mod h1:9eHowE7LcJ155ukCYUyuNzVAw9Ne0GXPXpHmu+iaMyk=
-github.com/apstndb/spanvalue v0.8.0 h1:wLHl/0m5C6PvRwJOJoz1nRL4qSpS17eS1tW3Pjzcvo8=
-github.com/apstndb/spanvalue v0.8.0/go.mod h1:bqVJYydQf+D0Tux1LtyRlREPVwrVYNG+1usZJ489GTA=
+github.com/apstndb/spantype v0.3.12 h1:BBku3svaObxjC8hjnYNOMZvKzCdIgaHDtUWaS2sVjxQ=
+github.com/apstndb/spantype v0.3.12/go.mod h1:9eHowE7LcJ155ukCYUyuNzVAw9Ne0GXPXpHmu+iaMyk=
+github.com/apstndb/spanvalue v0.8.1 h1:9EHScZGDLqksF0krmc9vXGyDHhyf4G0ymTTW6n4/uG8=
+github.com/apstndb/spanvalue v0.8.1/go.mod h1:bqVJYydQf+D0Tux1LtyRlREPVwrVYNG+1usZJ489GTA=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
