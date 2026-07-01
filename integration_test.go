@@ -231,8 +231,8 @@ func TestIntegrationPostgreSQLMultiStatementStats(t *testing.T) {
 	assertMultiStatementProfileQueryStats(t, openIntegrationDBPostgreSQL(t))
 }
 
-// TestIntegrationPostgreSQLTableHeaderSpanpg marks INT64 columns with a PostgreSQL-oriented type label (spanpg), not GoogleSQL INT64.
-func TestIntegrationPostgreSQLTableHeaderSpanpg(t *testing.T) {
+// TestIntegrationPostgreSQLTableHeaderSpantype marks INT64 columns with a PostgreSQL-oriented type label, not GoogleSQL INT64.
+func TestIntegrationPostgreSQLTableHeaderSpantype(t *testing.T) {
 	out := integrationPostgreSQLExecOutput(t, outputFormatTable, "SELECT 1 AS n;")
 	lo := strings.ToLower(out)
 	if !strings.Contains(lo, "bigint") {

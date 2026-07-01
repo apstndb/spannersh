@@ -32,11 +32,6 @@ func formatExecutionSummary(out io.Writer, rss *sppb.ResultSetStats, dataRowCoun
 	writeQueryStatsDetails(out, stats, verbose)
 }
 
-// writeExecutionStatsDetails prints query_stats key/values only when the API populated it.
-func writeExecutionStatsDetails(out io.Writer, rss *sppb.ResultSetStats, verbose bool) {
-	writeQueryStatsDetails(out, queryStatsMap(rss), verbose)
-}
-
 func writeQueryStatsDetails(out io.Writer, stats map[string]any, verbose bool) {
 	if stats != nil {
 		writeQueryStatsLines(out, stats, verbose)
