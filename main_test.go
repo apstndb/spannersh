@@ -144,8 +144,6 @@ func TestPrepareQuery(t *testing.T) {
 		{"explain analyze select 1", "select 1", sppb.ExecuteSqlRequest_PROFILE, stmtDisplayPlanOnlyProfile},
 		{"EXPLAIN ANALYZERS SELECT 1", "ANALYZERS SELECT 1", sppb.ExecuteSqlRequest_PLAN, stmtDisplayPlanOnlyPlan},
 		{"EXPLAINSELECT 1", "EXPLAINSELECT 1", sppb.ExecuteSqlRequest_PROFILE, stmtDisplayQueryResult},
-		{"EXPLAIN;", "", sppb.ExecuteSqlRequest_PLAN, stmtDisplayPlanOnlyPlan},
-		{"EXPLAIN ANALYZE;", "", sppb.ExecuteSqlRequest_PROFILE, stmtDisplayPlanOnlyProfile},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
@@ -163,6 +161,29 @@ func TestPrepareQuery(t *testing.T) {
 	}
 }
 
+func TestPlanExecutionRejectsExplainWithoutStatement(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantErr string
+	}{
+		{"EXPLAIN", "EXPLAIN requires a statement"},
+		{"EXPLAIN;", "EXPLAIN requires a statement"},
+		{"EXPLAIN ANALYZE", "EXPLAIN ANALYZE requires a statement"},
+		{"EXPLAIN ANALYZE;", "EXPLAIN ANALYZE requires a statement"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			_, err := planExecution(tc.input, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("err = %q, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestPlanExecution(t *testing.T) {
 	t.Run("one batch two selects", func(t *testing.T) {
 		plan, err := planExecution("SELECT 1; SELECT 2;", databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
@@ -174,6 +195,18 @@ func TestPlanExecution(t *testing.T) {
 		}
 		if g, w := joinBatchExecSQL(plan.batches[0]), "SELECT 1; SELECT 2"; g != w {
 			t.Fatalf("execSQL = %q, want %q", g, w)
+		}
+	})
+	t.Run("explainselect remains normal query", func(t *testing.T) {
+		plan, err := planExecution("EXPLAINSELECT 1", databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plan.batches) != 1 || len(plan.batches[0]) != 1 {
+			t.Fatalf("want 1 batch of 1, got %v", plan.batches)
+		}
+		if got := plan.batches[0][0]; got.execSQL != "EXPLAINSELECT 1" || got.kind != stmtDisplayQueryResult {
+			t.Fatalf("prepared query = %+v", got)
 		}
 	})
 	t.Run("one batch two explain plan", func(t *testing.T) {
