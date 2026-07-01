@@ -148,6 +148,9 @@ func parseCLIOpts(args []string, out, errOut io.Writer) (cliOpts, error) {
 	if exitCode != nil {
 		return opts, cliExitError{code: *exitCode}
 	}
+	if _, err := outputFormatFromString(opts.Format); err != nil {
+		return opts, err
+	}
 	return opts, nil
 }
 
@@ -173,6 +176,10 @@ func openCLIApp(ctx context.Context, out, errOut io.Writer, opts cliOpts) (*app,
 	if err != nil {
 		return nil, err
 	}
+	format, err := outputFormatFromString(opts.Format)
+	if err != nil {
+		return nil, err
+	}
 	db, err := openSpannerDB(opts, dsnDialectForCLI(dialectEnum, autoDialect))
 	if err != nil {
 		return nil, err
@@ -181,7 +188,7 @@ func openCLIApp(ctx context.Context, out, errOut io.Writer, opts cliOpts) (*app,
 		ctx:     ctx,
 		out:     out,
 		db:      db,
-		format:  outputFormatFromString(opts.Format),
+		format:  format,
 		verbose: opts.Verbose,
 		dialect: resolveEffectiveDialect(ctx, errOut, db, dialectEnum, autoDialect),
 	}, nil

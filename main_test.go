@@ -65,26 +65,40 @@ func TestDialectFromDatabaseOptionValue(t *testing.T) {
 
 func TestOutputFormatFromString(t *testing.T) {
 	tests := []struct {
-		in   string
-		want outputFormat
+		name    string
+		in      string
+		want    outputFormat
+		wantErr bool
 	}{
-		{"table", outputFormatTable},
-		{"TABLE", outputFormatTable},
-		{"Table", outputFormatTable},
-		{" Table ", outputFormatTable},
-		{"csv", outputFormatCSV},
-		{"CSV", outputFormatCSV},
-		{"Csv", outputFormatCSV},
-		{"jsonl", outputFormatJSONL},
-		{"JSONL", outputFormatJSONL},
-		{"Jsonl", outputFormatJSONL},
-		{"unknown", outputFormatTable},
-		{"", outputFormatTable},
+		{name: "table", in: "table", want: outputFormatTable},
+		{name: "table uppercase", in: "TABLE", want: outputFormatTable},
+		{name: "table mixed case", in: "Table", want: outputFormatTable},
+		{name: "table trimmed", in: " Table ", want: outputFormatTable},
+		{name: "csv", in: "csv", want: outputFormatCSV},
+		{name: "csv uppercase", in: "CSV", want: outputFormatCSV},
+		{name: "csv mixed case", in: "Csv", want: outputFormatCSV},
+		{name: "jsonl", in: "jsonl", want: outputFormatJSONL},
+		{name: "jsonl uppercase", in: "JSONL", want: outputFormatJSONL},
+		{name: "jsonl mixed case", in: "Jsonl", want: outputFormatJSONL},
+		{name: "unknown", in: "unknown", wantErr: true},
+		{name: "empty", in: "", wantErr: true},
 	}
 	for _, tc := range tests {
-		if got := outputFormatFromString(tc.in); got != tc.want {
-			t.Fatalf("outputFormatFromString(%q) = %q, want %q", tc.in, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := outputFormatFromString(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("outputFormatFromString(%q) error = nil, want error", tc.in)
+				}
+				if !strings.Contains(err.Error(), "use table, csv, or jsonl") {
+					t.Fatalf("outputFormatFromString(%q) error = %q, want accepted values", tc.in, err)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("outputFormatFromString(%q) = (%q, %v), want (%q, nil)", tc.in, got, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -437,6 +451,16 @@ func TestParseCLIOptsVerbose(t *testing.T) {
 	}
 	if !opts.Verbose {
 		t.Fatal("expected -v to enable verbose query_stats output")
+	}
+}
+
+func TestParseCLIOptsRejectsInvalidFormat(t *testing.T) {
+	_, err := parseCLIOpts([]string{"--format", "xml"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected invalid format error")
+	}
+	if !strings.Contains(err.Error(), `invalid format "xml"`) {
+		t.Fatalf("parseCLIOpts invalid format error = %q", err)
 	}
 }
 
