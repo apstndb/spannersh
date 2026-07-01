@@ -454,6 +454,16 @@ func TestParseCLIOptsVerbose(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptsFormat(t *testing.T) {
+	opts, err := parseCLIOpts([]string{"--format", "jsonl"}, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Format != outputFormatJSONL {
+		t.Fatalf("format = %q, want %q", opts.Format, outputFormatJSONL)
+	}
+}
+
 func TestParseCLIOptsRejectsInvalidFormat(t *testing.T) {
 	_, err := parseCLIOpts([]string{"--format", "xml"}, io.Discard, io.Discard)
 	if err == nil {

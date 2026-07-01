@@ -27,3 +27,12 @@ func outputFormatFromString(s string) (outputFormat, error) {
 		return "", fmt.Errorf("invalid format %q (use table, csv, or jsonl)", trimmed)
 	}
 }
+
+func (f *outputFormat) UnmarshalText(text []byte) error {
+	format, err := outputFormatFromString(string(text))
+	if err != nil {
+		return err
+	}
+	*f = format
+	return nil
+}
