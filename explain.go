@@ -127,6 +127,20 @@ func joinBatchExecSQL(batch []preparedQuery) string {
 	return strings.Join(parts, "; ")
 }
 
+func validatePreparedQuery(pq preparedQuery) error {
+	if pq.execSQL != "" {
+		return nil
+	}
+	switch pq.kind {
+	case stmtDisplayPlanOnlyPlan:
+		return fmt.Errorf("EXPLAIN requires a statement")
+	case stmtDisplayPlanOnlyProfile:
+		return fmt.Errorf("EXPLAIN ANALYZE requires a statement")
+	default:
+		return nil
+	}
+}
+
 // planExecution splits input with the driver parser, prepares each statement, then groups into batches.
 func planExecution(raw string, dialect databasepb.DatabaseDialect) (executionPlan, error) {
 	parts, err := splitIntoStatements(strings.TrimSpace(raw), dialect)
@@ -136,6 +150,9 @@ func planExecution(raw string, dialect databasepb.DatabaseDialect) (executionPla
 	steps := make([]preparedQuery, len(parts))
 	for i, p := range parts {
 		steps[i] = prepareQuery(p)
+		if err := validatePreparedQuery(steps[i]); err != nil {
+			return executionPlan{}, err
+		}
 	}
 	return executionPlan{batches: groupIntoBatches(steps)}, nil
 }
