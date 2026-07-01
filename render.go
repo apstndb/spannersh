@@ -186,10 +186,9 @@ func formatTypeForHeader(typ *sppb.Type, dialect databasepb.DatabaseDialect) str
 	return spantype.FormatTypeNormal(typ)
 }
 
-// renderTableCells uses [spanvalue.SimpleFormatConfig] for PostgreSQL dialect (human-readable
-// scalars, matching the former spanpg.FormatColumnSimple bridge); GoogleSQL uses
-// [spanvalue.FormatRowColumns] with the Cloud Spanner CLI-compatible formatter (STRUCT as
-// tuple parentheses).
+// renderTableCells uses [spanvalue.SimpleFormatConfig] for PostgreSQL dialect
+// (human-readable scalars); GoogleSQL uses [spanvalue.FormatRowColumns] with
+// the Cloud Spanner CLI-compatible formatter (STRUCT as tuple parentheses).
 func renderTableCells(dialect databasepb.DatabaseDialect, fc *spanvalue.FormatConfig, columnNames []string, values []spanner.GenericColumnValue) ([]string, error) {
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		ss := make([]string, 0, len(values))
@@ -253,14 +252,4 @@ func renderResultSetJSONL(out io.Writer, metadata *sppb.ResultSetMetadata, resul
 	// On abort, RowsRead reflects progress at the abort point (dbsqlrows
 	// partial-result contract); surface it alongside the error.
 	return exported.RowsRead, err
-}
-
-func finishWriterFlush(flush func() error, rowErr error) error {
-	if flushErr := flush(); flushErr != nil {
-		if rowErr != nil {
-			return errors.Join(rowErr, flushErr)
-		}
-		return flushErr
-	}
-	return rowErr
 }

@@ -409,22 +409,6 @@ func TestSpannerCLITableFormatConfigUsesTupleStructs(t *testing.T) {
 	}
 }
 
-func TestFinishWriterFlushReportsFlushError(t *testing.T) {
-	flushErr := errors.New("flush failed")
-	if err := finishWriterFlush(func() error { return flushErr }, nil); !errors.Is(err, flushErr) {
-		t.Fatalf("finishWriterFlush error = %v, want flush error", err)
-	}
-}
-
-func TestFinishWriterFlushJoinsRowAndFlushErrors(t *testing.T) {
-	rowErr := errors.New("row failed")
-	flushErr := errors.New("flush failed")
-	err := finishWriterFlush(func() error { return flushErr }, rowErr)
-	if !errors.Is(err, rowErr) || !errors.Is(err, flushErr) {
-		t.Fatalf("finishWriterFlush error = %v, want joined row and flush errors", err)
-	}
-}
-
 func TestSpannerEnvDefaults(t *testing.T) {
 	t.Setenv("SPANNER_PROJECT_ID", "proj-env")
 	t.Setenv("SPANNER_INSTANCE_ID", "inst-env")
