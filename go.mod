@@ -12,7 +12,7 @@ require (
 	github.com/googleapis/go-sql-spanner v1.26.0
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.1
-	github.com/nyaosorg/go-ttyadapter v0.6.2
+	github.com/nyaosorg/go-ttyadapter v0.7.0
 	github.com/olekukonko/tablewriter v1.1.4
 	golang.org/x/term v0.45.0
 	google.golang.org/protobuf v1.36.11
