@@ -69,7 +69,7 @@ jobs:
           rm -f spannersh.testbin
 
       - name: Verify generated docs
-        if: matrix.go == '1.26'
+        if: matrix.go == '1.26.5'
         run: |
           go generate ./...
           git diff --exit-code -- README.md docs/generated/spannersh-help.txt docs/generated/connection-properties.generated.md
