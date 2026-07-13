@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // outputFormat selects how result rows are printed (query result sets only; EXPLAIN plan trees stay ASCII tables).
 type outputFormat string
@@ -11,15 +14,25 @@ const (
 	outputFormatJSONL outputFormat = "jsonl"
 )
 
-func outputFormatFromString(s string) outputFormat {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+func outputFormatFromString(s string) (outputFormat, error) {
+	trimmed := strings.TrimSpace(s)
+	switch strings.ToLower(trimmed) {
 	case "csv":
-		return outputFormatCSV
+		return outputFormatCSV, nil
 	case "jsonl":
-		return outputFormatJSONL
-	case "table", "":
-		return outputFormatTable
+		return outputFormatJSONL, nil
+	case "table":
+		return outputFormatTable, nil
 	default:
-		return outputFormatTable
+		return "", fmt.Errorf("invalid format %q (use table, csv, or jsonl)", trimmed)
 	}
+}
+
+func (f *outputFormat) UnmarshalText(text []byte) error {
+	format, err := outputFormatFromString(string(text))
+	if err != nil {
+		return err
+	}
+	*f = format
+	return nil
 }

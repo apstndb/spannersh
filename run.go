@@ -46,7 +46,7 @@ type cliOpts struct {
 	// also prepends dialect=POSTGRESQL to the DSN unless --dsn-suffix already set dialect=.
 	Dialect string `name:"dialect" default:"auto" placeholder:"DIALECT" help:"Client-side SQL parser dialect: auto, google-standard-sql, or postgresql. PostgreSQL adds dialect=POSTGRESQL to the DSN unless --dsn-suffix already sets dialect=."`
 	// Format selects result-set rendering only. EXPLAIN / EXPLAIN ANALYZE plan trees ignore it.
-	Format string `name:"format" default:"table" placeholder:"FORMAT" help:"Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree."`
+	Format outputFormat `name:"format" default:"table" placeholder:"FORMAT" help:"Output format: table, csv, or jsonl. EXPLAIN plan output is always a text plan tree."`
 }
 
 type cliExitError struct {
@@ -181,7 +181,7 @@ func openCLIApp(ctx context.Context, out, errOut io.Writer, opts cliOpts) (*app,
 		ctx:     ctx,
 		out:     out,
 		db:      db,
-		format:  outputFormatFromString(opts.Format),
+		format:  opts.Format,
 		verbose: opts.Verbose,
 		dialect: resolveEffectiveDialect(ctx, errOut, db, dialectEnum, autoDialect),
 	}, nil
