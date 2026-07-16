@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	cloud.google.com/go/spanner v1.92.0
-	github.com/alecthomas/kong v1.15.0
+	github.com/alecthomas/kong v1.16.0
 	github.com/apstndb/spanemuboost v0.4.6
 	github.com/apstndb/spannerplan v0.2.1
 	github.com/apstndb/spantype v0.3.13
@@ -12,7 +12,7 @@ require (
 	github.com/googleapis/go-sql-spanner v1.26.0
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.1
-	github.com/nyaosorg/go-ttyadapter v0.6.2
+	github.com/nyaosorg/go-ttyadapter v0.7.0
 	github.com/olekukonko/tablewriter v1.1.4
 	golang.org/x/term v0.45.0
 	google.golang.org/protobuf v1.36.11
