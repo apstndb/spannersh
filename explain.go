@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
@@ -15,6 +14,10 @@ type preparedQuery struct {
 	execSQL string
 	mode    *sppb.ExecuteSqlRequest_QueryMode
 	kind    stmtDisplayKind
+	// lineCommentOpen is true when execSQL ends inside a dialect line comment.
+	// The joined batch must put a newline before the next separator so the
+	// comment does not swallow it. A separator of ";" plus newline is not enough.
+	lineCommentOpen bool
 }
 
 // stmtDisplayKind controls whether we print the data result set, execution summary, and/or the plan tree.
@@ -29,10 +32,6 @@ const (
 	stmtDisplayPlanOnlyPlan
 )
 
-// Strip Spanner EXPLAIN / EXPLAIN ANALYZE on the client and use ExecuteSqlRequest QueryMode (PLAN / PROFILE) instead.
-// The leading (EXPLAIN\s+ANALYZE\b|…) branch detects ANALYZE (\b keeps EXPLAIN ANALYZERS … on the PLAN path).
-var reStripExplainPrefix = regexp.MustCompile(`(?is)^(?:(EXPLAIN\s+ANALYZE\b)|EXPLAIN)(?:\s+(.*))?\s*;?\s*$`)
-
 func trimExecSQL(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) > 0 && s[len(s)-1] == ';' {
@@ -42,16 +41,31 @@ func trimExecSQL(s string) string {
 }
 
 // prepareQuery returns SQL for go-sql-spanner (EXPLAIN prefix stripped) plus execution/display mode.
-func prepareQuery(sql string) preparedQuery {
+// Comment-aware prefix detection is local because go-sql-spanner's comment scanner is not exported.
+// Statement category checks use parser.DetectStatementType.
+func prepareQuery(sql string, dialect databasepb.DatabaseDialect) preparedQuery {
 	s := strings.TrimSpace(sql)
-	if m := reStripExplainPrefix.FindStringSubmatch(s); m != nil {
-		execSQL := trimExecSQL(m[2])
-		if m[1] != "" {
-			return preparedQuery{execSQL, sppb.ExecuteSqlRequest_PROFILE.Enum(), stmtDisplayPlanOnlyProfile}
-		}
-		return preparedQuery{execSQL, sppb.ExecuteSqlRequest_PLAN.Enum(), stmtDisplayPlanOnlyPlan}
+	kind, inner, ok := stripExplainPrefix(s, dialect)
+	execSQL := trimExecSQL(s)
+	if ok {
+		execSQL = trimExecSQL(inner)
+	} else {
+		kind = stmtDisplayQueryResult
 	}
-	return preparedQuery{trimExecSQL(s), sppb.ExecuteSqlRequest_PROFILE.Enum(), stmtDisplayQueryResult}
+	pq := preparedQuery{
+		execSQL:         execSQL,
+		kind:            kind,
+		lineCommentOpen: statementEndsInOpenLineComment(execSQL, dialect),
+	}
+	switch kind {
+	case stmtDisplayPlanOnlyProfile:
+		pq.mode = sppb.ExecuteSqlRequest_PROFILE.Enum()
+	case stmtDisplayPlanOnlyPlan:
+		pq.mode = sppb.ExecuteSqlRequest_PLAN.Enum()
+	default:
+		pq.mode = sppb.ExecuteSqlRequest_PROFILE.Enum()
+	}
+	return pq
 }
 
 // splitIntoStatements splits on top-level ';' using go-sql-spanner's parser (strings in literals/comments are respected).
@@ -120,24 +134,53 @@ func groupIntoBatches(steps []preparedQuery) [][]preparedQuery {
 
 // joinBatchExecSQL builds the SQL string sent to the driver for one batch (stripped inner SQL only).
 func joinBatchExecSQL(batch []preparedQuery) string {
-	parts := make([]string, len(batch))
+	var b strings.Builder
 	for i, s := range batch {
-		parts[i] = s.execSQL
+		if i > 0 {
+			if batch[i-1].lineCommentOpen {
+				b.WriteString("\n; ")
+			} else {
+				b.WriteString("; ")
+			}
+		}
+		b.WriteString(s.execSQL)
 	}
-	return strings.Join(parts, "; ")
+	return b.String()
 }
 
-func validatePreparedQuery(pq preparedQuery) error {
-	if pq.execSQL != "" {
+func validatePreparedQuery(pq preparedQuery, dialect databasepb.DatabaseDialect) error {
+	if pq.execSQL == "" {
+		switch pq.kind {
+		case stmtDisplayPlanOnlyPlan:
+			return fmt.Errorf("EXPLAIN requires a statement")
+		case stmtDisplayPlanOnlyProfile:
+			return fmt.Errorf("EXPLAIN ANALYZE requires a statement")
+		default:
+			return nil
+		}
+	}
+	if pq.kind == stmtDisplayQueryResult {
 		return nil
 	}
-	switch pq.kind {
-	case stmtDisplayPlanOnlyPlan:
-		return fmt.Errorf("EXPLAIN requires a statement")
-	case stmtDisplayPlanOnlyProfile:
-		return fmt.Errorf("EXPLAIN ANALYZE requires a statement")
-	default:
+	p, err := parser.NewStatementParser(effectiveStatementDialect(dialect), 0)
+	if err != nil {
+		return err
+	}
+	prefix := "EXPLAIN"
+	if pq.kind == stmtDisplayPlanOnlyProfile {
+		prefix = "EXPLAIN ANALYZE"
+	}
+	switch p.DetectStatementType(pq.execSQL).StatementType {
+	case parser.StatementTypeQuery, parser.StatementTypeDml:
 		return nil
+	case parser.StatementTypeDdl:
+		return fmt.Errorf("%s does not support DDL", prefix)
+	case parser.StatementTypeClientSide:
+		return fmt.Errorf("%s does not support client-side statements", prefix)
+	default:
+		// Unknown includes statements the driver does not classify, such as TRUNCATE.
+		// Sending those with QueryMode PLAN does not stop DDL execution.
+		return fmt.Errorf("%s does not support this statement", prefix)
 	}
 }
 
@@ -149,8 +192,8 @@ func planExecution(raw string, dialect databasepb.DatabaseDialect) (executionPla
 	}
 	steps := make([]preparedQuery, len(parts))
 	for i, p := range parts {
-		steps[i] = prepareQuery(p)
-		if err := validatePreparedQuery(steps[i]); err != nil {
+		steps[i] = prepareQuery(p, dialect)
+		if err := validatePreparedQuery(steps[i], dialect); err != nil {
 			return executionPlan{}, err
 		}
 	}

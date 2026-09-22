@@ -101,6 +101,45 @@ func TestIntegrationMultiStatementDisplay(t *testing.T) {
 	}
 }
 
+func TestIntegrationExplainDDLDoesNotChangeSchema(t *testing.T) {
+	db := openIntegrationDB(t)
+	var buf bytes.Buffer
+	cli := &app{ctx: t.Context(), out: &buf, db: db, format: outputFormatTable, dialect: databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL}
+	statements := []string{
+		"EXPLAIN CREATE TABLE ExplainReject (Id INT64 NOT NULL) PRIMARY KEY (Id)",
+		"/* note */ EXPLAIN CREATE TABLE ExplainReject2 (Id INT64 NOT NULL) PRIMARY KEY (Id)",
+		"EXPLAIN /* note */ DROP TABLE ExplainReject",
+	}
+	for _, sqlText := range statements {
+		buf.Reset()
+		err := cli.executeAndRender(sqlText)
+		if err == nil || !strings.Contains(err.Error(), "does not support DDL") {
+			t.Fatalf("%s: err = %v", sqlText, err)
+		}
+	}
+	var n int
+	if err := db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('ExplainReject', 'ExplainReject2')").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("EXPLAIN DDL created %d tables", n)
+	}
+}
+
+func TestIntegrationLineCommentDoesNotSwallowNextStatement(t *testing.T) {
+	for _, dialect := range []databasepb.DatabaseDialect{
+		databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL,
+		databasepb.DatabaseDialect_POSTGRESQL,
+	} {
+		t.Run(dialect.String(), func(t *testing.T) {
+			out := integrationExecOutputFormat(t, outputFormatTable, dialect, "SELECT 1 AS x -- trailing comment\n; SELECT 2 AS y;")
+			if strings.Count(out, "row in set") < 2 || !strings.Contains(out, "| x") || !strings.Contains(out, "| y") {
+				t.Fatalf("want both statements, got:\n%s", out)
+			}
+		})
+	}
+}
+
 func TestIntegrationExplainPlanSelect1(t *testing.T) {
 	// PLAN mode; emulator may omit plan nodes and produce no visible output — must complete without error.
 	_ = integrationExecOutput(t, "EXPLAIN SELECT 1;")
