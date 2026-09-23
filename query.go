@@ -19,6 +19,7 @@ type app struct {
 	ctx     context.Context
 	out     io.Writer
 	db      *sql.DB
+	conn    *sql.Conn
 	format  outputFormat
 	verbose bool
 	dialect databasepb.DatabaseDialect
@@ -41,7 +42,7 @@ func (a *app) executeAndRenderContext(ctx context.Context, query string) error {
 			execSQL: joinBatchExecSQL(batch),
 			mode:    batch[0].mode,
 		}
-		head, err := executeQuery(ctx, a.db, pq)
+		head, err := executeQuery(ctx, a.conn, pq)
 		if err != nil {
 			return err
 		}
@@ -73,8 +74,15 @@ func buildExecOptions(mode *sppb.ExecuteSqlRequest_QueryMode) spannerdriver.Exec
 	}
 }
 
-func executeQuery(ctx context.Context, db *sql.DB, pq preparedQuery) (*queryHead, error) {
-	rows, err := db.QueryContext(ctx, pq.execSQL, buildExecOptions(pq.mode))
+func executeQuery(ctx context.Context, conn *sql.Conn, pq preparedQuery) (*queryHead, error) {
+	if conn == nil {
+		return nil, errors.New("session connection is not open")
+	}
+	// sql.Conn stays checked out across inputs, so the driver does not ResetSession
+	// between them. ResetSession would roll back a transaction and clear properties.
+	// Per-input cancellation still uses ctx. The driver detaches explicit BEGIN from
+	// that context; this code does not.
+	rows, err := conn.QueryContext(ctx, pq.execSQL, buildExecOptions(pq.mode))
 	if err != nil {
 		return nil, err
 	}

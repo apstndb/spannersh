@@ -81,7 +81,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer cli.db.Close()
+	defer cli.close()
 	return runREPL(ctx, cli, errOut)
 }
 
@@ -177,14 +177,47 @@ func openCLIApp(ctx context.Context, out, errOut io.Writer, opts cliOpts) (*app,
 	if err != nil {
 		return nil, err
 	}
+	dialect := resolveEffectiveDialect(ctx, errOut, db, dialectEnum, autoDialect)
+	// Check out the session connection before warmup so the pool query cannot
+	// take the connection that holds user transactions and properties.
+	conn, err := acquireSessionConn(ctx, db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	startBackgroundWarmup(ctx, errOut, db)
 	return &app{
 		ctx:     ctx,
 		out:     out,
 		db:      db,
+		conn:    conn,
 		format:  outputFormatFromString(opts.Format),
 		verbose: opts.Verbose,
-		dialect: resolveEffectiveDialect(ctx, errOut, db, dialectEnum, autoDialect),
+		dialect: dialect,
 	}, nil
+}
+
+func acquireSessionConn(ctx context.Context, db *sql.DB) (*sql.Conn, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("session connection: %w", err)
+	}
+	return conn, nil
+}
+
+func (a *app) close() error {
+	var err error
+	if a.conn != nil {
+		err = a.conn.Close()
+		a.conn = nil
+	}
+	if a.db != nil {
+		if dbErr := a.db.Close(); err == nil {
+			err = dbErr
+		}
+		a.db = nil
+	}
+	return err
 }
 
 func dsnDialectForCLI(dialect databasepb.DatabaseDialect, autoDetect bool) databasepb.DatabaseDialect {
@@ -211,7 +244,6 @@ func resolveEffectiveDialect(ctx context.Context, errOut io.Writer, db *sql.DB, 
 	} else {
 		resolved = dialect
 	}
-	startBackgroundWarmup(ctx, errOut, db)
 	return resolved
 }
 
