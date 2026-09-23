@@ -20,11 +20,11 @@ var defaultQueryStatsKeys = map[string]struct{}{
 	"rows_scanned":         {},
 }
 
-// formatExecutionSummary prints "N row(s) in set" and, when present, query_stats lines after it.
+// formatExecutionSummary prints the exact or lower-bound row summary and,
+// when present, query_stats lines after it.
 func formatExecutionSummary(out io.Writer, rss *sppb.ResultSetStats, dataRowCount int, verbose bool) {
 	stats := queryStatsMap(rss)
-	n := effectiveRowCount(rss, dataRowCount)
-	fmt.Fprintln(out, rowsInSetLine(n, stats))
+	fmt.Fprintln(out, rowsInSetLine(rowCountFromStats(rss, dataRowCount), stats))
 	if rss == nil {
 		fmt.Fprintln(out, "No execution statistics returned.")
 		return
@@ -73,23 +73,46 @@ func queryStatsKeysForDisplay(m map[string]any, verbose bool) []string {
 	})
 }
 
-func effectiveRowCount(rss *sppb.ResultSetStats, dataRowCount int) int {
-	if exact := rss.GetRowCountExact(); exact > 0 {
-		return int(exact)
-	}
-	return dataRowCount
+type rowCountKind int
+
+const (
+	rowCountFromData rowCountKind = iota
+	rowCountExact
+	rowCountLowerBound
+)
+
+type rowCount struct {
+	kind rowCountKind
+	n    int64
 }
 
-func rowsInSetLine(n int, stats map[string]any) string {
-	elapsed := elapsedForSummaryLine(stats)
+// rowCountFromStats uses the protobuf row-count oneof. Exact zero stays exact.
+// A lower bound is never reported as exact. An absent oneof uses drained data rows.
+// The count stays int64 so a 32-bit build does not truncate it.
+func rowCountFromStats(rss *sppb.ResultSetStats, dataRowCount int) rowCount {
+	switch rc := rss.GetRowCount().(type) {
+	case *sppb.ResultSetStats_RowCountExact:
+		return rowCount{kind: rowCountExact, n: rc.RowCountExact}
+	case *sppb.ResultSetStats_RowCountLowerBound:
+		return rowCount{kind: rowCountLowerBound, n: rc.RowCountLowerBound}
+	default:
+		return rowCount{kind: rowCountFromData, n: int64(dataRowCount)}
+	}
+}
+
+func rowsInSetLine(count rowCount, stats map[string]any) string {
 	rowWord := "rows"
-	if n == 1 {
+	if count.n == 1 {
 		rowWord = "row"
 	}
-	if elapsed != "" {
-		return fmt.Sprintf("%d %s in set (%s)", n, rowWord, elapsed)
+	line := fmt.Sprintf("%d %s in set", count.n, rowWord)
+	if count.kind == rowCountLowerBound {
+		line = fmt.Sprintf("at least %d %s in set", count.n, rowWord)
 	}
-	return fmt.Sprintf("%d %s in set", n, rowWord)
+	if elapsed := elapsedForSummaryLine(stats); elapsed != "" {
+		return line + " (" + elapsed + ")"
+	}
+	return line
 }
 
 // elapsedForSummaryLine returns query_stats.elapsed_time when the field is present.
