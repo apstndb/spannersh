@@ -4,7 +4,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
+	"errors"
+	"io"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -54,7 +58,7 @@ func integrationExecOutput(t *testing.T, sql string) string {
 	return integrationExecOutputFormat(t, outputFormatTable, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL, sql)
 }
 
-func integrationExecOutputFormat(t *testing.T, format outputFormat, dialect databasepb.DatabaseDialect, sqlText string) string {
+func openIntegrationApp(t *testing.T, dialect databasepb.DatabaseDialect) *app {
 	t.Helper()
 	var db *sql.DB
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
@@ -62,8 +66,20 @@ func integrationExecOutputFormat(t *testing.T, format outputFormat, dialect data
 	} else {
 		db = openIntegrationDB(t)
 	}
+	conn, err := acquireSessionConn(t.Context(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return &app{ctx: t.Context(), out: io.Discard, db: db, conn: conn, format: outputFormatTable, dialect: dialect}
+}
+
+func integrationExecOutputFormat(t *testing.T, format outputFormat, dialect databasepb.DatabaseDialect, sqlText string) string {
+	t.Helper()
+	cli := openIntegrationApp(t, dialect)
 	var buf bytes.Buffer
-	cli := &app{ctx: t.Context(), out: &buf, db: db, format: format, dialect: dialect}
+	cli.out = &buf
+	cli.format = format
 	if err := cli.executeAndRender(sqlText); err != nil {
 		t.Fatal(err)
 	}
@@ -72,13 +88,113 @@ func integrationExecOutputFormat(t *testing.T, format outputFormat, dialect data
 
 func integrationPostgreSQLExecOutput(t *testing.T, format outputFormat, sqlText string) string {
 	t.Helper()
-	db := openIntegrationDBPostgreSQL(t)
+	return integrationExecOutputFormat(t, format, databasepb.DatabaseDialect_POSTGRESQL, sqlText)
+}
+
+func sessionExec(t *testing.T, cli *app, sqlText string) string {
+	t.Helper()
 	var buf bytes.Buffer
-	cli := &app{ctx: t.Context(), out: &buf, db: db, format: format, dialect: databasepb.DatabaseDialect_POSTGRESQL}
+	cli.out = &buf
 	if err := cli.executeAndRender(sqlText); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%s: %v", sqlText, err)
 	}
 	return buf.String()
+}
+
+func TestIntegrationSessionSurvivesInputs(t *testing.T) {
+	cli := openIntegrationApp(t, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+	sessionExec(t, cli, "CREATE TABLE SessionTxn (Id INT64 NOT NULL) PRIMARY KEY (Id)")
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (1)")
+	sessionExec(t, cli, "ROLLBACK")
+	if got := sessionCount(t, cli); got != "0" {
+		t.Fatalf("rollback count = %s", got)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (1)")
+	sessionExec(t, cli, "COMMIT")
+	if got := sessionCount(t, cli); got != "1" {
+		t.Fatalf("commit count = %s", got)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (2)")
+	sessionExec(t, cli, "ROLLBACK")
+	if got := sessionCount(t, cli); got != "1" {
+		t.Fatalf("second rollback count = %s", got)
+	}
+
+	sessionExec(t, cli, "SET statement_timeout = '1s'")
+	if out := sessionExec(t, cli, "SHOW VARIABLE statement_timeout"); !strings.Contains(out, "1s") {
+		t.Fatalf("SET did not persist:\n%s", out)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "EXPLAIN SELECT 1")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (3)")
+	sessionExec(t, cli, "ROLLBACK")
+	if got := sessionCount(t, cli); got != "1" {
+		t.Fatalf("PLAN input count = %s", got)
+	}
+
+	sessionExec(t, cli, "START BATCH DML")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (4)")
+	sessionExec(t, cli, "ABORT BATCH")
+	if got := sessionCount(t, cli); got != "1" {
+		t.Fatalf("aborted batch count = %s", got)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (5)")
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := cli.executeAndRenderContext(canceled, "SELECT COUNT(*) AS n FROM SessionTxn")
+	// The driver surfaces cancellation as a status error. It does not always unwrap to context.Canceled.
+	if err == nil || (!errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "context canceled")) {
+		t.Fatalf("canceled query err = %v", err)
+	}
+	sessionExec(t, cli, "COMMIT")
+	if got := sessionCount(t, cli); got != "2" {
+		t.Fatalf("commit after canceled query count = %s", got)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (6)")
+	if err := runWarmupQuery(t.Context(), cli.db); err != nil {
+		t.Fatal(err)
+	}
+	sessionExec(t, cli, "ROLLBACK")
+	if got := sessionCount(t, cli); got != "2" {
+		t.Fatalf("pool warmup count = %s", got)
+	}
+
+	sessionExec(t, cli, "BEGIN TRANSACTION")
+	sessionExec(t, cli, "INSERT INTO SessionTxn (Id) VALUES (7)")
+	if err := cli.conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cli.conn = nil
+	var n int64
+	if err := cli.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM SessionTxn").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("closing the session connection count = %d, want 2", n)
+	}
+}
+
+func sessionCount(t *testing.T, cli *app) string {
+	t.Helper()
+	out := sessionExec(t, cli, "SELECT COUNT(*) AS n FROM SessionTxn")
+	// Table cells are padded, for example "| 0     |", and a type row sits under the name.
+	matches := regexp.MustCompile(`(?m)^\|\s+(\d+)\s+\|$`).FindAllStringSubmatch(out, -1)
+	if len(matches) == 1 {
+		return matches[0][1]
+	}
+	t.Fatalf("count output:\n%s", out)
+	return ""
 }
 
 func TestIntegrationExecuteAndRenderSelect1(t *testing.T) {
@@ -102,9 +218,9 @@ func TestIntegrationMultiStatementDisplay(t *testing.T) {
 }
 
 func TestIntegrationExplainDDLDoesNotChangeSchema(t *testing.T) {
-	db := openIntegrationDB(t)
+	cli := openIntegrationApp(t, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
 	var buf bytes.Buffer
-	cli := &app{ctx: t.Context(), out: &buf, db: db, format: outputFormatTable, dialect: databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL}
+	cli.out = &buf
 	statements := []string{
 		"EXPLAIN CREATE TABLE ExplainReject (Id INT64 NOT NULL) PRIMARY KEY (Id)",
 		"/* note */ EXPLAIN CREATE TABLE ExplainReject2 (Id INT64 NOT NULL) PRIMARY KEY (Id)",
@@ -118,7 +234,7 @@ func TestIntegrationExplainDDLDoesNotChangeSchema(t *testing.T) {
 		}
 	}
 	var n int
-	if err := db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('ExplainReject', 'ExplainReject2')").Scan(&n); err != nil {
+	if err := cli.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('ExplainReject', 'ExplainReject2')").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
