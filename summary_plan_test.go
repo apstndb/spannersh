@@ -30,7 +30,7 @@ func TestRowsInSetLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := rowsInSetLine(tt.rows, tt.stats); got != tt.want {
+			if got := rowsInSetLine(rowCount{kind: rowCountExact, n: int64(tt.rows)}, tt.stats); got != tt.want {
 				t.Fatalf("rowsInSetLine(%d, %v) = %q, want %q", tt.rows, tt.stats, got, tt.want)
 			}
 		})
@@ -62,6 +62,86 @@ func TestFormatExecutionSummary(t *testing.T) {
 			t.Fatalf("summary = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestRowCountOneof(t *testing.T) {
+	const big = int64(1<<40) + 3
+	tests := []struct {
+		name string
+		rss  *sppb.ResultSetStats
+		data int
+		want string
+	}{
+		{
+			name: "exact zero does not use data rows",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountExact{RowCountExact: 0}},
+			data: 4,
+			want: "0 rows in set",
+		},
+		{
+			name: "exact one",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountExact{RowCountExact: 1}},
+			data: 9,
+			want: "1 row in set",
+		},
+		{
+			name: "lower bound zero",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountLowerBound{RowCountLowerBound: 0}},
+			data: 4,
+			want: "at least 0 rows in set",
+		},
+		{
+			name: "lower bound one",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountLowerBound{RowCountLowerBound: 1}},
+			data: 0,
+			want: "at least 1 row in set",
+		},
+		{
+			name: "lower bound many",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountLowerBound{RowCountLowerBound: 2}},
+			data: 0,
+			want: "at least 2 rows in set",
+		},
+		{
+			name: "absent count uses data rows",
+			rss:  &sppb.ResultSetStats{},
+			data: 3,
+			want: "3 rows in set",
+		},
+		{
+			name: "lower bound keeps int64 width",
+			rss:  &sppb.ResultSetStats{RowCount: &sppb.ResultSetStats_RowCountLowerBound{RowCountLowerBound: big}},
+			data: 0,
+			want: "at least 1099511627779 rows in set",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			formatExecutionSummary(&out, tc.rss, tc.data, false)
+			if got := out.String(); !strings.HasPrefix(got, tc.want+"\n") {
+				t.Fatalf("summary = %q, want prefix %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderQueryPlanFromStatsProfileLowerBound(t *testing.T) {
+	var out bytes.Buffer
+	rss := &sppb.ResultSetStats{
+		RowCount: &sppb.ResultSetStats_RowCountLowerBound{RowCountLowerBound: 2},
+		QueryStats: testQueryStats(t, map[string]any{
+			"elapsed_time": "11 ms",
+			"cpu_time":     "3 ms",
+		}),
+	}
+	if err := renderQueryPlanFromStats(&out, rss, 0, stmtDisplayPlanOnlyProfile, false); err != nil {
+		t.Fatal(err)
+	}
+	want := "at least 2 rows in set (11 ms)\ncpu_time: 3 ms\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
 }
 
 func TestRenderQueryPlanFromStatsNilStatsReturnsError(t *testing.T) {

@@ -197,6 +197,57 @@ func sessionCount(t *testing.T, cli *app) string {
 	return ""
 }
 
+func TestIntegrationPartitionedDMLReportsLowerBound(t *testing.T) {
+	clients := spanemuboost.SetupClients(t, lazyRuntime, spanemuboost.WithRandomDatabaseID())
+	t.Setenv("SPANNER_EMULATOR_HOST", clients.URI())
+	open := func(suffix string) *sql.DB {
+		t.Helper()
+		dsn := composeSpannerDSN(clients.ProjectID, clients.InstanceID, clients.DatabaseID, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL, suffix)
+		db, err := sql.Open("spanner", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { db.Close() })
+		return db
+	}
+	openApp := func(db *sql.DB, out io.Writer) *app {
+		t.Helper()
+		conn, err := acquireSessionConn(t.Context(), db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		return &app{ctx: t.Context(), out: out, db: db, conn: conn, format: outputFormatTable, dialect: databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL}
+	}
+	normal := open("use_plain_text=true")
+	cli := openApp(normal, io.Discard)
+	for _, stmt := range []string{
+		"CREATE TABLE PdmlCount (Id INT64 NOT NULL) PRIMARY KEY (Id)",
+		"INSERT INTO PdmlCount (Id) VALUES (1), (2)",
+	} {
+		if err := cli.executeAndRender(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	pdml := open("use_plain_text=true;autocommit_dml_mode=PARTITIONED_NON_ATOMIC")
+	var out bytes.Buffer
+	pdmlApp := openApp(pdml, &out)
+	if err := pdmlApp.executeAndRender("DELETE FROM PdmlCount WHERE Id > 0"); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Contains(got, "0 rows in set") || !strings.Contains(got, "at least 2 rows in set") {
+		t.Fatalf("partitioned DML summary:\n%s", got)
+	}
+	var n int64
+	if err := normal.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM PdmlCount").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("deleted rows remaining = %d", n)
+	}
+}
+
 func TestIntegrationExecuteAndRenderSelect1(t *testing.T) {
 	if out := integrationExecOutput(t, "SELECT 1;"); !strings.Contains(out, "1 row in set") {
 		t.Fatalf("expected row summary in output:\n%s", out)

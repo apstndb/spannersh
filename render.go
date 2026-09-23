@@ -79,8 +79,7 @@ func renderQueryPlanFromStats(out io.Writer, rss *sppb.ResultSetStats, drainedRo
 	switch kind {
 	case stmtDisplayPlanOnlyProfile:
 		stats := queryStatsMap(rss)
-		n := effectiveRowCount(rss, drainedRowCount)
-		fmt.Fprintln(out, rowsInSetLine(n, stats))
+		fmt.Fprintln(out, rowsInSetLine(rowCountFromStats(rss, drainedRowCount), stats))
 		writeQueryStatsDetails(out, stats, verbose)
 	case stmtDisplayPlanOnlyPlan:
 		// plan tree only (already printed above)
