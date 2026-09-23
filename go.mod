@@ -8,7 +8,7 @@ require (
 	github.com/apstndb/spanemuboost v0.4.6
 	github.com/apstndb/spannerplan v0.2.1
 	github.com/apstndb/spantype v0.3.13
-	github.com/apstndb/spanvalue v0.8.3
+	github.com/apstndb/spanvalue v0.9.1
 	github.com/googleapis/go-sql-spanner v1.26.0
 	github.com/hymkor/go-multiline-ny v0.23.1
 	github.com/nyaosorg/go-readline-ny v1.15.1
