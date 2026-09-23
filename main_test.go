@@ -147,7 +147,7 @@ func TestPrepareQuery(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			pq := prepareQuery(tc.input)
+			pq := prepareQuery(tc.input, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
 			if pq.execSQL != tc.wantExec {
 				t.Fatalf("execSQL = %q, want %q", pq.execSQL, tc.wantExec)
 			}
