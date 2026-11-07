@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-go@v6
+        id: go
         with:
           go-version-file: go.mod
           cache: true
@@ -28,9 +29,13 @@ jobs:
           version: 2026.4.28
           install: true
           cache: true
+          # Cached govulncheck binaries must understand this Go language version.
+          cache_key_prefix: mise-v1-go-${{ steps.go.outputs.go-version }}
 
       - name: govulncheck
-        run: mise exec -- govulncheck ./...
+        run: |
+          go version -m "$(mise which govulncheck)"
+          mise exec -- govulncheck ./...
 
   codeql:
     runs-on: ubuntu-latest
