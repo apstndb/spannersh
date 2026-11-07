@@ -130,8 +130,11 @@ Properties with `connectionstate.ContextStartup` apply at connect time; `Context
 
 The grouped tables above are for quick orientation. The table below lists **every** DSN / `SHOW` / `SET` identifier exposed by **`github.com/googleapis/go-sql-spanner`** in the version currently selected by this repository’s `go.mod` (same set as [generated/connection-properties.generated.md](./generated/connection-properties.generated.md)). Summaries are shortened from upstream English; for verbatim **`description`** text, see the generated file. When dependency updates change the property set, run `go generate ./...` and update this table so its property names and summaries stay aligned with the generated file.
 
+Properties marked **PostgreSQL only** are compatibility settings available on PostgreSQL-dialect connections.
+
 | Property | Context | Summary |
 |----------|---------|---------|
+| `application_name` | `ContextUser`; PostgreSQL only | Application name for statistics and logs; currently a no-op. |
 | `authority` | `ContextStartup` | The expected server name in the TLS handshake. By default, the endpoint hostname is used. This option is useful when connecting to Spanner via Google Private Connect or other custom endpoints where… |
 | `auto_batch_dml` | `ContextUser` | Automatically buffer DML statements that are executed on this connection and execute them as one batch when a non-DML statement is executed, or when the current transaction is committed. The update… |
 | `auto_batch_dml_update_count` | `ContextUser` | DML statements that are executed when auto_batch_dml is set to true, are not directly sent to Spanner, but are buffered in the client until the batch is flushed. This property determines the update… |
@@ -143,6 +146,8 @@ The grouped tables above are for quick orientation. The table below lists **ever
 | `ca_cert_file` | `ContextStartup` | The path to the CA certificate file to use for TLS connections to the server. This is only needed when connecting to an experimental host endpoint |
 | `client_cert_file` | `ContextStartup` | The path to the client certificate file to use for mTLS connections to the server. This is only needed when connecting to an experimental host endpoint |
 | `client_cert_key` | `ContextStartup` | The path to the client certificate key file to use for mTLS connections to the server. This is only needed when connecting to an experimental host endpoint |
+| `client_encoding` | `ContextUser`; PostgreSQL only | Client character encoding; Spanner only supports UTF-8. |
+| `client_min_messages` | `ContextUser`; PostgreSQL only | Client message level; currently a no-op. |
 | `commit_priority` | `ContextUser` | Sets the priority for commit RPC invocations from this connection (HIGH/MEDIUM/LOW/UNSPECIFIED). The default is UNSPECIFIED. |
 | `commit_response` | `ContextUser`; read-only | The commit response of the last implicit or explicit read/write transaction that was executed on the connection, or an error if the connection has not executed a read/write transaction that committ… |
 | `commit_timestamp` | `ContextUser`; read-only | The commit timestamp of the last implicit or explicit read/write transaction that was executed on the connection, or an error if the connection has not executed a read/write transaction that commit… |
@@ -157,7 +162,10 @@ The grouped tables above are for quick orientation. The table below lists **ever
 | `ddl_execution_mode` | `ContextUser` | ddl_execution_mode determines how DDL statements are executed. SYNC (default): The driver waits for the Long Running Operation (LRO) to complete. ASYNC: The driver returns immediately after the ser… |
 | `decode_numeric_to_string` | `ContextUser` | decode_numeric_to_string determines whether numeric values should be returned as strings or as instances of big.Rat. The latter is the default and is consistent with the type that is used by the Sp… |
 | `decode_to_native_arrays` | `ContextUser` | decode_to_native_arrays determines whether arrays that have a Go native type should be decoded to those types rather than the corresponding spanner.NullTypeName type. Enabling this option will for … |
+| `default_sequence_kind` | `ContextUser` | Default sequence kind to set automatically when DDL fails because a sequence kind is missing. |
+| `default_transaction_isolation` | `ContextUser`; PostgreSQL only | Default transaction isolation, serializable or repeatable read; defaults to serializable. |
 | `dialect` | `ContextUser` | The default dialect to use when creating new databases using this connection. You do not need to set this property for any existing database. The driver will automatically detect the dialect of the… |
+| `directed_read` | `ContextUser` | Directed read options for read-only transactions and single-use queries. |
 | `disable_native_metrics` | `ContextStartup` | Disables native metrics for this connection. If true, native metrics will not be emitted. |
 | `disable_route_to_leader` | `ContextStartup` | Disable routing read/write transactions and partitioned DML to the leader region (true/false) |
 | `disable_statement_cache` | `ContextStartup` | Disables the use of the statement cache. |
@@ -180,9 +188,12 @@ The grouped tables above are for quick orientation. The table below lists **ever
 | `return_commit_stats` | `ContextUser` | return_commit_stats determines whether transactions should request Spanner to return commit statistics. |
 | `rpc_priority` | `ContextUser` | Sets the priority for all RPC invocations from this connection (HIGH/MEDIUM/LOW/UNSPECIFIED). The default is UNSPECIFIED. |
 | `send_typed_strings` | `ContextUser` | Whether string query parameters are sent as untyped (default) or typed strings (see upstream). |
+| `server_version` | `ContextUser`; read-only; PostgreSQL only | PostgreSQL compatibility server version string (14.1). |
+| `server_version_num` | `ContextUser`; read-only; PostgreSQL only | PostgreSQL compatibility server version number (140001). |
 | `statement_cache_size` | `ContextStartup` | The size of the internal cache that is used for connectors that are created from this connection string. This cache stores the result of parsing SQL statements for query parameters and the type of … |
 | `statement_tag` | `ContextUser` | The statement (request) tag to add to the next statement on this connection. |
 | `statement_timeout` | `ContextUser` | The timeout to apply to all statements on this connection. Setting the timeout to zero means no timeout. |
+| `timezone` | `ContextUser`; PostgreSQL only | Default connection time zone; currently a no-op. |
 | `transaction_batch_read_only` | `ContextUser` | transaction_batch_read_only indicates whether read-only transactions on this connection should use a batch read-only transaction. |
 | `transaction_deferrable` | `ContextUser` | transaction_deferrable is a no-op on Spanner. It is defined in this driver for compatibility with PostgreSQL. |
 | `transaction_read_only` | `ContextUser` | transaction_read_only is the default read-only mode for transactions on this connection. |
