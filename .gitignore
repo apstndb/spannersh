@@ -1,6 +1,9 @@
 # Built binary (default local name from README)
 /spannersh
 
+# GoReleaser outputs must not mark release binaries as dirty.
+/dist/
+
 # Local env / secrets
 .env
 .env.*
