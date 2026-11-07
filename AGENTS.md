@@ -45,6 +45,7 @@ All material **saved in this repository**—source code, comments, tests, Markdo
 - **`maps.Keys(m)`** order is **unspecified**. For stable display order use something like **`slices.Sorted(maps.Keys(m))`**.
 - **`slices.MaxFunc`** **panics on an empty slice** — check length first.
 - Match the **`go` version in `go.mod`**. Prefer **`t.Context()`** in tests when you need a `Context` (Go 1.24+).
+- Dependency updates target the latest patch of **Go 1.26.x**. Do not hold updates back for Go 1.25 compatibility; **v0.2.3** is the compatibility release for that line.
 
 ## When “reducing line count”
 

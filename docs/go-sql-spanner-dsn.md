@@ -89,8 +89,9 @@ Properties with `connectionstate.ContextStartup` apply at connect time; `Context
 | `statement_cache_size` | Statement parser cache size; see `SPANNER_DEFAULT_STATEMENT_CACHE_SIZE`. |
 | `disable_statement_cache` | Disable statement cache. |
 | `connect_timeout` | Timeout when creating a connection. |
-| `is_experimental_host` | Experimental host connection. |
-| `ca_cert_file` / `client_cert_file` / `client_cert_key` | mTLS for experimental hosts. |
+| `type` | Spanner instance type, `CLOUD` (default) or `OMNI`; set `type=OMNI` for Spanner Omni. |
+| `is_experimental_host` | **Deprecated**; use `type=OMNI` instead. |
+| `ca_cert_file` / `client_cert_file` / `client_cert_key` | TLS/mTLS certificates for Spanner Omni. |
 | `min_sessions` / `max_sessions` | **Deprecated** (session pool removal). |
 | `dialect` | Hint when **creating** a new DB; existing DBs are usually auto-detected. |
 | `database_dialect` | **Read-only** — dialect of the **connected** database (determined at connect). Distinct from `dialect`; inspect with **`SHOW VARIABLE database_dialect`** (or see the generated property list). |
@@ -143,9 +144,9 @@ Properties marked **PostgreSQL only** are compatibility settings available on Po
 | `auto_partition_mode` | `ContextUser` | Execute all queries on this connection as partitioned queries. Executing a query that cannot be partitioned will fail. Executing a query in a read/write transaction will also fail. |
 | `autocommit_dml_mode` | `ContextUser` | Determines the transaction type that is used to execute DML statements when the connection is in auto-commit mode. |
 | `begin_transaction_option` | `ContextUser` | BeginTransactionOption determines the default for how to begin transactions. The driver uses spanner.InlinedBeginTransaction by default for both read-only and read/write transactions. |
-| `ca_cert_file` | `ContextStartup` | The path to the CA certificate file to use for TLS connections to the server. This is only needed when connecting to an experimental host endpoint |
-| `client_cert_file` | `ContextStartup` | The path to the client certificate file to use for mTLS connections to the server. This is only needed when connecting to an experimental host endpoint |
-| `client_cert_key` | `ContextStartup` | The path to the client certificate key file to use for mTLS connections to the server. This is only needed when connecting to an experimental host endpoint |
+| `ca_cert_file` | `ContextStartup` | CA certificate file for TLS connections to Spanner Omni. |
+| `client_cert_file` | `ContextStartup` | Client certificate file for mTLS connections to Spanner Omni. |
+| `client_cert_key` | `ContextStartup` | Client certificate key file for mTLS connections to Spanner Omni. |
 | `client_encoding` | `ContextUser`; PostgreSQL only | Client character encoding; Spanner only supports UTF-8. |
 | `client_min_messages` | `ContextUser`; PostgreSQL only | Client message level; currently a no-op. |
 | `commit_priority` | `ContextUser` | Sets the priority for commit RPC invocations from this connection (HIGH/MEDIUM/LOW/UNSPECIFIED). The default is UNSPECIFIED. |
@@ -172,7 +173,7 @@ Properties marked **PostgreSQL only** are compatibility settings available on Po
 | `enable_end_to_end_tracing` | `ContextStartup` | Enable end-to-end tracing (true/false) to generate traces for both the time that is spent in the client, as well as time that is spent in the Spanner server. Server side traces can only go to Googl… |
 | `endpoint` | `ContextStartup` | The endpoint that the driver should connect to. The default is the default Spanner production endpoint when auto_config_emulator=false, and the default Spanner emulator endpoint (localhost:9010) wh… |
 | `exclude_txn_from_change_streams` | `ContextUser` | exclude_txn_from_change_streams determines whether transactions on this connection should be excluded from change streams. This property affects both normal read/write transactions, DML statements … |
-| `is_experimental_host` | `ContextStartup` | Indicates whether the connection is to an experimental host endpoint (true/false). Set this value to true when connecting to an experimental host endpoint |
+| `is_experimental_host` | `ContextStartup` | **Deprecated**; use `type=OMNI` for Spanner Omni connections. |
 | `isolation_level` | `ContextUser` | The transaction isolation level that is used by default for read/write transactions. The default is LevelDefault, which means that the connection will use the default isolation level of the databas… |
 | `max_commit_delay` | `ContextUser` | The max delay that Spanner may apply to commit requests to improve throughput. |
 | `max_partitioned_parallelism` | `ContextUser` | The maximum number of workers to use to read data from partitioned queries. |
@@ -199,6 +200,7 @@ Properties marked **PostgreSQL only** are compatibility settings available on Po
 | `transaction_read_only` | `ContextUser` | transaction_read_only is the default read-only mode for transactions on this connection. |
 | `transaction_tag` | `ContextUser` | The transaction tag to add to the next read/write transaction on this connection. |
 | `transaction_timeout` | `ContextUser` | The timeout to apply to all read/write transactions on this connection. Setting the timeout to zero means no timeout. |
+| `type` | `ContextStartup` | Spanner instance type, `CLOUD` (default) or `OMNI`; `type=OMNI` is required for Spanner Omni. |
 | `use_plain_text` | `ContextStartup` | Use a plain text communication channel (i.e. non-TLS) for communicating with the server (true/false). Set this value to true for communication with the Spanner emulator. |
 
 ---
