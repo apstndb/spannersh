@@ -10,7 +10,7 @@ Because **spannersh** delegates query execution to [go-sql-spanner](https://gith
 
 ## Prerequisites
 
-- Go 1.26.10+
+- Go 1.26.11+
 - Google Cloud credentials with access to the target instance (for example Application Default Credentials from `gcloud auth application-default login`).
 
 [v0.2.3](https://github.com/apstndb/spannersh/releases/tag/v0.2.3) is the last Go 1.25-compatible release in this update sequence; see its release notes for known security limitations.
